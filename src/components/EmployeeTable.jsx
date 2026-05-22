@@ -19,7 +19,7 @@ const COLUMNS = [
   { key: 'status', label: 'Status', width: 'w-[110px]', sortable: true },
 ]
 
-export default function EmployeeTable({ employees, selected, setSelected }) {
+export default function EmployeeTable({ employees, selected, setSelected, onRowClick }) {
   const [sortKey, setSortKey] = useState('name')
   const [sortDir, setSortDir] = useState('asc')
   const [page, setPage] = useState(1)
@@ -137,8 +137,10 @@ export default function EmployeeTable({ employees, selected, setSelected }) {
             return (
               <tr
                 key={emp.id}
+                onClick={() => onRowClick?.(emp)}
                 className={classNames(
                   'border-b border-rippling-line-2 data-row',
+                  onRowClick && 'cursor-pointer hover:bg-rippling-surface',
                   isSelected && 'is-selected'
                 )}
               >
@@ -147,6 +149,7 @@ export default function EmployeeTable({ employees, selected, setSelected }) {
                     type="checkbox"
                     checked={isSelected}
                     onChange={() => toggleOne(emp.id)}
+                    onClick={(event) => event.stopPropagation()}
                     className="rippling-checkbox"
                   />
                 </td>
