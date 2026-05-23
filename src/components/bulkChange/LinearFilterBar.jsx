@@ -23,7 +23,6 @@ export default function LinearFilterBar({
   mentionedEmployees,
   onMention,
   onRemoveMention,
-  onClearFilters,
   attributeCounts,
   scopeForAttribute,
   aiContext,
@@ -80,8 +79,6 @@ export default function LinearFilterBar({
   const editingChip = pickerState.editing
     ? chips.find((chip) => chip.id === pickerState.editing)
     : null
-
-  const hasAnything = chips.length > 0 || mentionedEmployees.length > 0
 
   const parserContext = useMemo(
     () => ({
@@ -214,16 +211,6 @@ export default function LinearFilterBar({
             <span>Ask AI</span>
             <span className="ml-1 text-[10px] text-rippling-plum/60">?</span>
           </button>
-
-          {hasAnything && (
-            <button
-              type="button"
-              onClick={onClearFilters}
-              className="ml-auto inline-flex items-center h-7 px-2 text-[12px] text-rippling-muted hover:text-rippling-ink ui-interactive rounded-md"
-            >
-              Clear filters
-            </button>
-          )}
         </div>
 
         <FilterPicker
