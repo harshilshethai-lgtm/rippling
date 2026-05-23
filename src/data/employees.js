@@ -1,4 +1,4 @@
-// 100 fake employees for the prototype
+// 1000 fake employees for the prototype
 // Diverse names, realistic title/dept/location distribution, manager chains
 
 const firstNames = [
@@ -25,28 +25,170 @@ const lastNames = [
 
 const departments = [
   'Engineering',
+  'Product',
+  'Design',
+  'Data',
+  'IT',
+  'Security',
   'Sales',
+  'Revenue Operations',
+  'Customer Success',
   'Customer Support',
+  'Implementation',
   'Finance',
   'People',
   'Marketing',
-  'Product',
   'Operations',
   'Legal',
-  'IT',
 ]
 
 const titlesByDept = {
-  'Engineering': ['Software Engineer', 'Senior Software Engineer', 'Staff Engineer', 'Engineering Manager', 'Senior Engineering Manager', 'Director of Engineering', 'VP of Engineering', 'QA Engineer', 'Senior QA Engineer', 'Integration Engineer'],
-  'Sales': ['Account Executive', 'Senior Account Executive', 'Sales Development Rep', 'Sales Manager', 'Director of Sales', 'VP of Sales', 'Solutions Engineer'],
-  'Customer Support': ['Support Specialist', 'Senior Support Specialist', 'Support Manager', 'Customer Success Manager', 'Lead Customer Success Manager', 'Director of Customer Success'],
-  'Finance': ['Financial Analyst', 'Senior Financial Analyst', 'Accounting Manager', 'Senior Manager, Accounting', 'Controller', 'VP of Finance', 'CFO'],
-  'People': ['People Ops Specialist', 'HR Business Partner', 'Senior HR Business Partner', 'People Ops Manager', 'Director of People', 'VP of People', 'CHRO'],
-  'Marketing': ['Marketing Specialist', 'Content Marketing Manager', 'Product Marketing Manager', 'Growth Marketing Manager', 'Director of Marketing', 'VP of Marketing'],
-  'Product': ['Product Manager', 'Senior Product Manager', 'Group Product Manager', 'Director of Product', 'VP of Product', 'Product Designer', 'Senior Product Designer'],
-  'Operations': ['Operations Analyst', 'Operations Manager', 'Senior Operations Manager', 'Director of Operations', 'COO'],
-  'Legal': ['Legal Counsel', 'Senior Legal Counsel', 'General Counsel', 'Paralegal'],
-  'IT': ['IT Engineer', 'Senior IT Engineer', 'IT Systems Manager', 'IT Administrator', 'Director of IT'],
+  'Engineering': [
+    'Engineering Intern',
+    'Associate Software Engineer',
+    'Software Engineer',
+    'Senior Software Engineer',
+    'Staff Engineer',
+    'Principal Engineer',
+    'Engineering Manager',
+    'Senior Engineering Manager',
+    'Director of Engineering',
+    'VP of Engineering',
+  ],
+  'Product': [
+    'Product Intern',
+    'Associate Product Manager',
+    'Product Manager',
+    'Senior Product Manager',
+    'Group Product Manager',
+    'Director of Product',
+    'VP of Product',
+    'Chief Product Officer',
+  ],
+  'Design': [
+    'Design Intern',
+    'Associate Product Designer',
+    'Product Designer',
+    'Senior Product Designer',
+    'Lead Product Designer',
+    'Design Manager',
+    'Director of Design',
+    'VP of Design',
+  ],
+  'Data': [
+    'Data Analyst Intern',
+    'Data Analyst',
+    'Senior Data Analyst',
+    'Data Scientist',
+    'Senior Data Scientist',
+    'Analytics Engineering Manager',
+    'Director of Data',
+  ],
+  'IT': [
+    'IT Intern',
+    'IT Support Specialist',
+    'IT Administrator',
+    'IT Engineer',
+    'Senior IT Engineer',
+    'IT Systems Manager',
+    'Director of IT',
+  ],
+  'Security': [
+    'Security Analyst',
+    'Senior Security Analyst',
+    'Security Engineer',
+    'Senior Security Engineer',
+    'Security Manager',
+    'Director of Security',
+    'Chief Information Security Officer',
+  ],
+  'Sales': [
+    'Sales Development Intern',
+    'Sales Development Rep',
+    'Account Executive',
+    'Senior Account Executive',
+    'Enterprise Account Executive',
+    'Sales Manager',
+    'Director of Sales',
+    'VP of Sales',
+    'Chief Revenue Officer',
+  ],
+  'Revenue Operations': [
+    'Revenue Operations Analyst',
+    'Senior Revenue Operations Analyst',
+    'Revenue Operations Manager',
+    'Director of Revenue Operations',
+  ],
+  'Customer Success': [
+    'Customer Success Associate',
+    'Customer Success Manager',
+    'Senior Customer Success Manager',
+    'Lead Customer Success Manager',
+    'Director of Customer Success',
+    'VP of Customer Success',
+  ],
+  'Customer Support': [
+    'Support Intern',
+    'Support Specialist',
+    'Senior Support Specialist',
+    'Support Manager',
+    'Director of Support',
+  ],
+  'Implementation': [
+    'Implementation Specialist',
+    'Senior Implementation Specialist',
+    'Implementation Manager',
+    'Director of Implementation',
+  ],
+  'Finance': [
+    'Finance Intern',
+    'Financial Analyst',
+    'Senior Financial Analyst',
+    'Accounting Manager',
+    'Senior Manager, Accounting',
+    'Controller',
+    'VP of Finance',
+    'CFO',
+  ],
+  'People': [
+    'People Operations Intern',
+    'People Ops Coordinator',
+    'People Ops Specialist',
+    'HR Business Partner',
+    'Senior HR Business Partner',
+    'People Ops Manager',
+    'Director of People',
+    'VP of People',
+    'CHRO',
+  ],
+  'Marketing': [
+    'Marketing Intern',
+    'Marketing Specialist',
+    'Content Marketing Manager',
+    'Product Marketing Manager',
+    'Growth Marketing Manager',
+    'Demand Generation Manager',
+    'Director of Marketing',
+    'VP of Marketing',
+    'Chief Marketing Officer',
+  ],
+  'Operations': [
+    'Operations Intern',
+    'Operations Analyst',
+    'Operations Manager',
+    'Senior Operations Manager',
+    'Director of Operations',
+    'VP of Operations',
+    'COO',
+  ],
+  'Legal': [
+    'Legal Intern',
+    'Paralegal',
+    'Legal Counsel',
+    'Senior Legal Counsel',
+    'Associate General Counsel',
+    'General Counsel',
+  ],
 }
 
 const locations = [
@@ -82,7 +224,7 @@ const randInt = (n) => Math.floor(rand() * n)
 const BOARD_MANAGER = 'Board of Directors'
 
 function isManagerTitle(title) {
-  return /Manager|Director|VP|Lead|Head|Chief|Counsel|COO|CFO|CHRO/.test(title)
+  return /Manager|Director|VP|Lead|Head|Chief|Counsel|COO|CFO|CHRO|CEO|President/.test(title)
 }
 
 function pickManagerFor(employees, dept, excludeId) {
@@ -113,8 +255,9 @@ function assignManager(employee, manager) {
 
 /** Leadership has no manager in step 1; wire everyone into a single chain. */
 function ensureEveryoneHasManager(employees) {
+  const ceo = employees.find((e) => e.title === 'CEO' || e.title === 'Chief Executive Officer')
   const coo = employees.find((e) => e.title === 'COO')
-  const apex = coo || employees[0]
+  const apex = ceo || coo || employees[0]
 
   for (const emp of employees) {
     if (emp.manager) continue
@@ -144,22 +287,29 @@ function ensureEveryoneHasManager(employees) {
   }
 }
 
-// Build a manager pool first (10 senior managers), then assign reports to them
+// Build a leadership pool first, then assign reports to them
 function generateEmployees(count = 100) {
   const employees = []
 
-  // Step 1: create 10 senior managers (no manager themselves, "leadership")
+  // Step 1: create a leadership pool (no manager themselves)
   const managerSeedTitles = [
+    { title: 'CEO', dept: 'Operations' },
     { title: 'VP of Engineering', dept: 'Engineering' },
+    { title: 'VP of Product', dept: 'Product' },
+    { title: 'VP of Design', dept: 'Design' },
+    { title: 'Director of Data', dept: 'Data' },
     { title: 'VP of Sales', dept: 'Sales' },
-    { title: 'Director of Customer Success', dept: 'Customer Support' },
+    { title: 'Director of Revenue Operations', dept: 'Revenue Operations' },
+    { title: 'VP of Customer Success', dept: 'Customer Success' },
+    { title: 'Director of Support', dept: 'Customer Support' },
+    { title: 'Director of Implementation', dept: 'Implementation' },
     { title: 'VP of Finance', dept: 'Finance' },
     { title: 'VP of People', dept: 'People' },
     { title: 'VP of Marketing', dept: 'Marketing' },
-    { title: 'VP of Product', dept: 'Product' },
-    { title: 'COO', dept: 'Operations' },
+    { title: 'VP of Operations', dept: 'Operations' },
     { title: 'General Counsel', dept: 'Legal' },
     { title: 'Director of IT', dept: 'IT' },
+    { title: 'Director of Security', dept: 'Security' },
   ]
 
   for (let i = 0; i < managerSeedTitles.length; i++) {
@@ -219,7 +369,7 @@ function generateEmployees(count = 100) {
   return employees
 }
 
-export const EMPLOYEES = generateEmployees(100)
+export const EMPLOYEES = generateEmployees(1000)
 
 export const PEOPLE_TABS = [
   { id: 'all', label: 'All' },
