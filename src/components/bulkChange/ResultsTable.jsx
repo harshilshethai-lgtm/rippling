@@ -61,6 +61,7 @@ export default function ResultsTable({
   onToggleRow,
   onSelectAll,
   onUnselectAll,
+  onClearAll,
   onRemoveMention,
   onRemoveManualSignals,
 }) {
@@ -125,6 +126,15 @@ export default function ResultsTable({
             )}
           >
             Unselect all
+          </button>
+          <span className="text-rippling-muted">·</span>
+          <button
+            type="button"
+            onClick={onClearAll}
+            className="h-6 px-1.5 rounded transition-colors text-rippling-muted hover:text-rippling-ink hover:underline"
+            title="Remove all employees, filters, and imports from the worklist"
+          >
+            Clear all
           </button>
         </div>
 

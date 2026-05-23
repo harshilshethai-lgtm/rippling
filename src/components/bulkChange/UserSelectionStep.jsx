@@ -353,12 +353,13 @@ export default function UserSelectionStep({
     setExcludedIds(new Set(worklist.map(({ employee }) => employee.id)))
   }
 
-  function clearFilters() {
+  function clearAll() {
     setChips([])
     setMentionedIds(new Set())
     setCsvImportIds(new Set())
     setExcludedIds(new Set())
     setSearch('')
+    setCsvBanner(null)
   }
 
   const hasAnything = chips.length > 0 || mentionedIds.size > 0 || csvImportIds.size > 0
@@ -378,7 +379,6 @@ export default function UserSelectionStep({
           mentionedEmployees={mentionedEmployees}
           onMention={addMention}
           onRemoveMention={removeMention}
-          onClearFilters={clearFilters}
           attributeCounts={attributeCounts}
           scopeForAttribute={scopeForAttribute}
           aiContext={aiContext}
@@ -404,6 +404,7 @@ export default function UserSelectionStep({
             onToggleRow={toggleRow}
             onSelectAll={selectAll}
             onUnselectAll={unselectAll}
+            onClearAll={clearAll}
             onRemoveMention={removeMention}
             onRemoveManualSignals={removeManualSignals}
           />

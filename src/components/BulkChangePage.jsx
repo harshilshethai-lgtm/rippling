@@ -98,14 +98,15 @@ export default function BulkChangePage({
             <button
               type="button"
               onClick={() => setNameEditing(true)}
-              className="flex items-center gap-1.5 text-[15px] font-medium text-rippling-ink hover:text-rippling-plum transition-colors text-left min-w-0 max-w-[360px]"
-              title="Rename worklist"
+              className="flex items-center gap-1.5 text-[15px] font-medium text-rippling-ink hover:text-rippling-plum transition-colors text-left min-w-0 max-w-[360px] rounded px-1 -mx-1 border-b border-dashed border-rippling-line hover:border-rippling-plum/50 group/name"
+              title="Click to rename"
+              aria-label={`Worklist name: ${worklistName}. Click to rename.`}
             >
               <span className="truncate">{worklistName}</span>
               <Pencil
                 size={12}
                 strokeWidth={1.75}
-                className="text-rippling-muted opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                className="text-rippling-muted/70 group-hover/name:text-rippling-plum shrink-0"
               />
             </button>
           )}
