@@ -50,12 +50,13 @@ export default function PeopleListPage({ onNavigate }) {
   const activeFilterCount = Object.values(filters).reduce((sum, arr) => sum + arr.length, 0)
 
   function handleStartBulkChange() {
-    const ids = selected.size > 0 ? [...selected] : filteredEmployees.map((e) => e.id)
-    console.log('Start bulk change for', ids.length, 'people')
-    alert(
-      `Bulk change entry point\n\nScope: ${ids.length} ${ids.length === 1 ? 'person' : 'people'}\n\n` +
-        `From here, the bulk-change wizard would open. This is the scaffolding entry — wire your flow up to this handler.`
-    )
+    const ids = selected.size > 0 ? [...selected] : []
+    onNavigate({
+      name: 'bulk',
+      initialEmployeeIds: ids,
+      initialFilters: filters,
+      initialSearch: search,
+    })
   }
 
   return (
