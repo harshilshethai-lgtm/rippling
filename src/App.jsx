@@ -3,6 +3,7 @@ import TopNav from './components/TopNav'
 import Sidebar from './components/Sidebar'
 import PeopleListPage from './components/PeopleListPage'
 import EmployeeProfile from './components/EmployeeProfile'
+import BulkChangePage from './components/BulkChangePage'
 
 export default function App() {
   const [view, setView] = useState({ name: 'list' })
@@ -15,9 +16,16 @@ export default function App() {
         <Sidebar />
 
         <main className="flex-1 flex flex-col overflow-hidden bg-rippling-surface">
-          {view.name === 'list' ? (
-            <PeopleListPage onNavigate={setView} />
-          ) : (
+          {view.name === 'list' && <PeopleListPage onNavigate={setView} />}
+          {view.name === 'bulk' && (
+            <BulkChangePage
+              onNavigate={setView}
+              initialEmployeeIds={view.initialEmployeeIds}
+              initialFilters={view.initialFilters}
+              initialSearch={view.initialSearch}
+            />
+          )}
+          {view.name === 'profile' && (
             <EmployeeProfile employeeId={view.employeeId} onNavigate={setView} />
           )}
         </main>
