@@ -28,7 +28,7 @@ function chipsFromInitialFilters(initialFilters) {
   for (const [legacyKey, values] of Object.entries(initialFilters)) {
     const attribute = LEGACY_TO_ATTRIBUTE[legacyKey]
     if (!attribute || !Array.isArray(values) || values.length === 0) continue
-    chips.push({ id: makeChipId(), attribute, values: dedupeValues(values) })
+    chips.push({ id: makeChipId(), attribute, kind: 'categorical', values: dedupeValues(values) })
   }
   return chips
 }
@@ -123,17 +123,90 @@ export default function UserSelectionStep({
     [chips],
   )
 
+  // Built once: the parser is deterministic and doesn't need to recompute
+  // these every render. EMPLOYEES is module-static.
+  const aiContext = useMemo(() => {
+    const departments = new Set()
+    const locations = new Set()
+    const managers = new Set()
+    const titles = new Set()
+    for (const employee of EMPLOYEES) {
+      if (employee.department) departments.add(employee.department)
+      if (employee.location) locations.add(employee.location)
+      if (employee.manager) managers.add(employee.manager)
+      if (employee.title) titles.add(employee.title)
+    }
+    return {
+      employees: EMPLOYEES,
+      departments: [...departments].sort(),
+      locations: [...locations].sort(),
+      managers: [...managers].sort(),
+      titles: [...titles].sort(),
+    }
+  }, [])
+
   function addChip({ attribute, values }) {
     setChips((prev) => {
       const existing = prev.find((chip) => chip.attribute === attribute)
       if (existing) {
         return prev.map((chip) =>
           chip.id === existing.id
-            ? { ...chip, values: dedupeValues([...chip.values, ...values]) }
+            ? { ...chip, kind: 'categorical', values: dedupeValues([...chip.values, ...values]) }
             : chip,
         )
       }
-      return [...prev, { id: makeChipId(), attribute, values: dedupeValues(values) }]
+      return [...prev, { id: makeChipId(), attribute, kind: 'categorical', values: dedupeValues(values) }]
+    })
+  }
+
+  /**
+   * Apply a batch of provisional chips from the AI parser. Categorical chips
+   * merge with the existing chip for that attribute (additive); date_range
+   * chips replace the existing range chip for that attribute (latest wins).
+   */
+  function addChips(provisionalChips) {
+    if (!Array.isArray(provisionalChips) || provisionalChips.length === 0) return
+    setChips((prev) => {
+      let next = [...prev]
+      for (const provisional of provisionalChips) {
+        const kind = provisional.kind || 'categorical'
+        if (kind === 'date_range') {
+          const idx = next.findIndex((chip) => chip.attribute === provisional.attribute)
+          const newChip = {
+            id: idx >= 0 ? next[idx].id : makeChipId(),
+            attribute: provisional.attribute,
+            kind: 'date_range',
+            range: provisional.range,
+          }
+          if (idx >= 0) {
+            next = next.map((chip, i) => (i === idx ? newChip : chip))
+          } else {
+            next = [...next, newChip]
+          }
+          continue
+        }
+
+        const values = dedupeValues(provisional.values || [])
+        if (values.length === 0) continue
+        const idx = next.findIndex((chip) => chip.attribute === provisional.attribute)
+        if (idx >= 0) {
+          next = next.map((chip, i) =>
+            i === idx
+              ? {
+                  ...chip,
+                  kind: 'categorical',
+                  values: dedupeValues([...(chip.values || []), ...values]),
+                }
+              : chip,
+          )
+        } else {
+          next = [
+            ...next,
+            { id: makeChipId(), attribute: provisional.attribute, kind: 'categorical', values },
+          ]
+        }
+      }
+      return next
     })
   }
 
@@ -217,6 +290,7 @@ export default function UserSelectionStep({
           employees={EMPLOYEES}
           chips={chips}
           onAddChip={addChip}
+          onAddChips={addChips}
           onUpdateChip={updateChip}
           onRemoveChip={removeChip}
           mentionedEmployees={mentionedEmployees}
@@ -225,6 +299,7 @@ export default function UserSelectionStep({
           onClearFilters={clearFilters}
           attributeCounts={attributeCounts}
           scopeForAttribute={scopeForAttribute}
+          aiContext={aiContext}
         />
       </div>
 

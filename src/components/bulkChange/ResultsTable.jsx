@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { AtSign, Filter as FilterIcon, X } from 'lucide-react'
 import { avatarClass, classNames, initials } from '../../lib/utils'
-import { FILTER_SCHEMA } from './bulkChangeUtils'
+import { FILTER_SCHEMA, formatStartDate } from './bulkChangeUtils'
 
 const HEADER_CELL =
   'px-3 py-2.5 text-left font-semibold text-rippling-ink-2 text-[11px] uppercase tracking-wide border-r border-rippling-line bg-rippling-surface-2'
@@ -208,14 +208,16 @@ export default function ResultsTable({
                     {employee.title}
                   </td>
                   {dynamicColumns.map((column) => {
-                    const field = FILTER_SCHEMA[column]?.field
-                    const value = field ? employee[field] : ''
+                    const schema = FILTER_SCHEMA[column]
+                    const rawValue = schema?.field ? employee[schema.field] : ''
+                    const display =
+                      schema?.kind === 'date_range' ? formatStartDate(rawValue) : rawValue
                     return (
                       <td
                         key={`${employee.id}-${column}`}
                         className={classNames(BODY_CELL, 'text-rippling-ink-2')}
                       >
-                        {value || <span className="text-rippling-muted italic">—</span>}
+                        {display || <span className="text-rippling-muted italic">—</span>}
                       </td>
                     )
                   })}

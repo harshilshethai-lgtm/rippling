@@ -5,8 +5,8 @@ import { mentionableMatches } from './bulkChangeUtils'
 
 /**
  * Search input for the Linear-style filter bar. Plain text live-filters the
- * results table, while typing "@" opens an autocomplete to add named people
- * directly to the worklist as @-mentions.
+ * results table, typing "@" opens a mention autocomplete, and a leading "?"
+ * (or "? …" with prefill) launches the Ask AI popover.
  */
 export default function MentionInput({
   value,
@@ -14,6 +14,7 @@ export default function MentionInput({
   employees,
   excludeIds,
   onMention,
+  onAskAi,
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -49,6 +50,24 @@ export default function MentionInput({
 
   function handleChange(event) {
     const next = event.target.value
+
+    // Question trigger: a single leading "?" (or "? …" with prefill) opens
+    // the Ask AI popover and clears the input so we don't double-render the
+    // character. A plain "?" anywhere else is just text.
+    if (onAskAi) {
+      if (next === '?' && (value || '') === '') {
+        onValueChange?.('')
+        onAskAi('')
+        return
+      }
+      const aiTrigger = next.match(/^\?\s+(.*)$/)
+      if (aiTrigger) {
+        onValueChange?.('')
+        onAskAi(aiTrigger[1] || '')
+        return
+      }
+    }
+
     onValueChange?.(next)
 
     const caret = event.target.selectionStart ?? next.length
@@ -126,7 +145,7 @@ export default function MentionInput({
           onFocus={() => {
             if (mentionStart >= 0) setOpen(true)
           }}
-          placeholder="Search results, or type @ to mention someone..."
+          placeholder="Search by name or title — @ to select someone, ? to ask AI for filters"
           className="w-full h-9 bg-white border border-rippling-line rounded-md pl-9 pr-3 text-[13px] placeholder:text-rippling-muted focus:outline-none focus:ring-1 focus:ring-rippling-primary focus:border-rippling-primary transition-colors"
         />
       </div>

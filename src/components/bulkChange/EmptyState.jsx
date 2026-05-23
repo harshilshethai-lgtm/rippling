@@ -1,4 +1,4 @@
-import { AtSign, Layers, Plus } from 'lucide-react'
+import { AtSign, Layers, Plus, Sparkles } from 'lucide-react'
 
 export default function EmptyState() {
   return (
@@ -22,9 +22,15 @@ export default function EmptyState() {
           </span>
         </span>
         <span className="inline-flex items-center gap-1.5 rounded-full border border-rippling-line bg-white px-2.5 py-1">
+          <Sparkles size={11} strokeWidth={2} className="text-rippling-plum" />
+          <span>
+            Press <kbd className="px-1 py-px rounded border border-rippling-line bg-rippling-surface text-[10.5px] text-rippling-ink-2">?</kbd> to filter with AI
+          </span>
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-rippling-line bg-white px-2.5 py-1">
           <AtSign size={11} strokeWidth={2} className="text-rippling-plum" />
           <span>
-            Type <kbd className="px-1 py-px rounded border border-rippling-line bg-rippling-surface text-[10.5px] text-rippling-ink-2">@</kbd> to mention specific employees
+            Type <kbd className="px-1 py-px rounded border border-rippling-line bg-rippling-surface text-[10.5px] text-rippling-ink-2">@</kbd> to select specific employees
           </span>
         </span>
       </div>

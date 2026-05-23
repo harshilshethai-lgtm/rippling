@@ -1,21 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
-import { Plus, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Plus, Sparkles, X } from 'lucide-react'
 import { avatarClass, classNames, initials } from '../../lib/utils'
-import { FILTER_SCHEMA } from './bulkChangeUtils'
+import { FILTER_SCHEMA, formatChipValueLabel } from './bulkChangeUtils'
 import FilterPicker from './FilterPicker'
 import MentionInput from './MentionInput'
-
-function chipValueLabel(values) {
-  if (values.length === 0) return '—'
-  if (values.length === 1) return values[0]
-  if (values.length === 2) return `${values[0]}, ${values[1]}`
-  return `${values[0]}, ${values[1]} +${values.length - 2}`
-}
+import AskAiPopover from './AskAiPopover'
 
 /**
  * Linear-style filter bar: a search/mention input on top, then a chip row
  * that renders person chips for @-mentions, filter chips (click to edit, X to
- * remove), and an `+ Add filter` trigger that anchors the FilterPicker.
+ * remove), `+ Add filter`, and a sparkle "Ask AI" entry point.
  */
 export default function LinearFilterBar({
   search,
@@ -23,6 +17,7 @@ export default function LinearFilterBar({
   employees,
   chips,
   onAddChip,
+  onAddChips,
   onUpdateChip,
   onRemoveChip,
   mentionedEmployees,
@@ -31,9 +26,12 @@ export default function LinearFilterBar({
   onClearFilters,
   attributeCounts,
   scopeForAttribute,
+  aiContext,
 }) {
   const [pickerState, setPickerState] = useState({ open: false, editing: null })
+  const [askAi, setAskAi] = useState({ open: false, prompt: '' })
   const addButtonRef = useRef(null)
+  const askAiButtonRef = useRef(null)
 
   useEffect(() => {
     function onKeyDown(event) {
@@ -45,6 +43,11 @@ export default function LinearFilterBar({
         event.preventDefault()
         setPickerState({ open: true, editing: null })
         addButtonRef.current?.focus()
+      }
+      if (event.key === '?' && !event.metaKey && !event.ctrlKey && !event.altKey && !isTextInput) {
+        event.preventDefault()
+        setPickerState({ open: false, editing: null })
+        setAskAi({ open: true, prompt: '' })
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -80,6 +83,35 @@ export default function LinearFilterBar({
 
   const hasAnything = chips.length > 0 || mentionedEmployees.length > 0
 
+  const parserContext = useMemo(
+    () => ({
+      employees: aiContext?.employees || employees,
+      departments: aiContext?.departments || [],
+      locations: aiContext?.locations || [],
+      managers: aiContext?.managers || [],
+      titles: aiContext?.titles || [],
+    }),
+    [aiContext, employees],
+  )
+
+  function openAskAi(prompt) {
+    setPickerState({ open: false, editing: null })
+    setAskAi({ open: true, prompt: prompt || '' })
+  }
+
+  function closeAskAi() {
+    setAskAi({ open: false, prompt: '' })
+  }
+
+  function handleApplyAiChips(provisionalChips) {
+    if (!provisionalChips || provisionalChips.length === 0) {
+      closeAskAi()
+      return
+    }
+    onAddChips?.(provisionalChips)
+    closeAskAi()
+  }
+
   return (
     <div className="space-y-2">
       <MentionInput
@@ -88,6 +120,7 @@ export default function LinearFilterBar({
         employees={employees}
         excludeIds={excludeMentionIds}
         onMention={onMention}
+        onAskAi={openAskAi}
       />
 
       <div className="relative">
@@ -134,7 +167,7 @@ export default function LinearFilterBar({
                   <span className="text-rippling-muted">{chip.attribute}</span>
                   <span className="text-rippling-muted">is</span>
                   <span className="font-medium text-rippling-ink truncate max-w-[180px]">
-                    {chipValueLabel(chip.values)}
+                    {formatChipValueLabel(chip)}
                   </span>
                 </button>
                 <button
@@ -165,6 +198,23 @@ export default function LinearFilterBar({
             <span className="ml-1 text-[10px] text-rippling-muted">/</span>
           </button>
 
+          <button
+            ref={askAiButtonRef}
+            type="button"
+            onClick={() => openAskAi('')}
+            className={classNames(
+              'inline-flex items-center gap-1 h-7 px-2 rounded-full border border-dashed text-[12px] font-medium transition-colors',
+              askAi.open
+                ? 'border-rippling-plum bg-rippling-chip text-rippling-plum shadow-sm ring-1 ring-rippling-plum/20'
+                : 'border-purple-300 bg-purple-50 text-rippling-plum hover:bg-purple-100 hover:border-rippling-plum/50',
+            )}
+            aria-label="Ask AI to filter"
+          >
+            <Sparkles size={12} strokeWidth={2} className="text-rippling-primary" />
+            <span>Ask AI</span>
+            <span className="ml-1 text-[10px] text-rippling-plum/60">?</span>
+          </button>
+
           {hasAnything && (
             <button
               type="button"
@@ -187,6 +237,15 @@ export default function LinearFilterBar({
           }
           onClose={closePicker}
           onApply={handleApply}
+        />
+
+        <AskAiPopover
+          open={askAi.open}
+          anchorMode="left"
+          initialPrompt={askAi.prompt}
+          parserContext={parserContext}
+          onClose={closeAskAi}
+          onApplyChips={handleApplyAiChips}
         />
       </div>
     </div>
