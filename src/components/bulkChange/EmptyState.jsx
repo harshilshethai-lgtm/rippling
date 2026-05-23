@@ -1,6 +1,7 @@
 import { AtSign, Layers, Plus, Sparkles } from 'lucide-react'
+import CsvImportButton from './csvImport/CsvImportButton'
 
-export default function EmptyState() {
+export default function EmptyState({ onCsvImport }) {
   return (
     <div className="h-full min-h-[360px] border border-dashed border-rippling-line rounded-xl bg-white flex flex-col items-center justify-center text-center px-6 py-12">
       <div className="h-12 w-12 rounded-full bg-rippling-chip text-rippling-plum flex items-center justify-center mb-4">
@@ -33,6 +34,7 @@ export default function EmptyState() {
             Type <kbd className="px-1 py-px rounded border border-rippling-line bg-rippling-surface text-[10.5px] text-rippling-ink-2">@</kbd> to select specific employees
           </span>
         </span>
+        <CsvImportButton variant="card" onImported={onCsvImport} />
       </div>
     </div>
   )

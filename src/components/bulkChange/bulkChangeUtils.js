@@ -105,26 +105,56 @@ export function dynamicColumnsFromChips(chips) {
   return columns
 }
 
-/** Combines @-mentioned employees and filter matches, mention-first, deduped. */
-export function buildWorklist(allEmployees, chips, mentionedIds) {
+/**
+ * Combines @-mentioned, CSV-imported, and filter-matched employees into a
+ * single ordered worklist (mention-first, then CSV imports, then filter-only),
+ * deduped on employee.id. Each entry's `sources` is a multi-tag array so the
+ * worklist UI can render combined provenance like "CSV · Filter".
+ */
+export function buildWorklist(allEmployees, chips, mentionedIds, csvImportIds) {
   const filtered = applyFilters(allEmployees, chips)
   const filteredIds = new Set(filtered.map((employee) => employee.id))
+  const csvIds = csvImportIds || new Set()
 
-  const mentionedEntries = []
+  function buildSources({ id, isMention, isCsv }) {
+    const sources = []
+    if (isMention) sources.push('mention')
+    if (isCsv) sources.push('csv')
+    if (filteredIds.has(id)) sources.push('filter')
+    return sources
+  }
+
+  const seen = new Set()
+  const out = []
+
   for (const id of mentionedIds) {
     const employee = allEmployees.find((candidate) => candidate.id === id)
-    if (!employee) continue
-    mentionedEntries.push({
+    if (!employee || seen.has(employee.id)) continue
+    seen.add(employee.id)
+    out.push({
       employee,
-      sources: filteredIds.has(employee.id) ? ['mention', 'filter'] : ['mention'],
+      sources: buildSources({ id: employee.id, isMention: true, isCsv: csvIds.has(employee.id) }),
     })
   }
 
-  const filterEntries = filtered
-    .filter((employee) => !mentionedIds.has(employee.id))
-    .map((employee) => ({ employee, sources: ['filter'] }))
+  for (const id of csvIds) {
+    if (seen.has(id)) continue
+    const employee = allEmployees.find((candidate) => candidate.id === id)
+    if (!employee) continue
+    seen.add(employee.id)
+    out.push({
+      employee,
+      sources: buildSources({ id: employee.id, isMention: false, isCsv: true }),
+    })
+  }
 
-  return [...mentionedEntries, ...filterEntries]
+  for (const employee of filtered) {
+    if (seen.has(employee.id)) continue
+    seen.add(employee.id)
+    out.push({ employee, sources: ['filter'] })
+  }
+
+  return out
 }
 
 /** Search candidates for the @-mention dropdown. */

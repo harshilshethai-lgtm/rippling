@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, Pencil } from 'lucide-react'
-import StepIndicator, { BULK_CHANGE_STEPS } from './bulkChange/StepIndicator'
 import UserSelectionStep from './bulkChange/UserSelectionStep'
+import CsvImportButton from './bulkChange/csvImport/CsvImportButton'
 import { classNames } from '../lib/utils'
+
+const NEXT_STEP_LABEL = 'Define changes'
 
 const EMPTY_FILTERS = {
   department: [],
@@ -25,6 +27,18 @@ export default function BulkChangePage({
   const [selectionStats, setSelectionStats] = useState(INITIAL_STATS)
   const nameInputRef = useRef(null)
 
+  // Bridge: UserSelectionStep registers a handler so the CSV import button in
+  // the page header can push imported ids down without lifting all of the
+  // worklist state up here. EmptyState reuses the same handler directly via
+  // its own button instance inside UserSelectionStep.
+  const csvImportHandlerRef = useRef(null)
+  const registerCsvImport = useCallback((handler) => {
+    csvImportHandlerRef.current = handler
+  }, [])
+  const handleHeaderCsvImport = useCallback((payload) => {
+    csvImportHandlerRef.current?.(payload)
+  }, [])
+
   useEffect(() => {
     if (!nameEditing) return
     nameInputRef.current?.focus()
@@ -42,7 +56,7 @@ export default function BulkChangePage({
   function handleContinue() {
     if (!canContinue) return
     alert(
-      `Continue to "${BULK_CHANGE_STEPS[1].label}" with ${selectionStats.selected} ${
+      `Continue to "${NEXT_STEP_LABEL}" with ${selectionStats.selected} ${
         selectionStats.selected === 1 ? 'employee' : 'employees'
       } in the worklist.\n\nFollow-up steps will be implemented next.`,
     )
@@ -98,7 +112,7 @@ export default function BulkChangePage({
         </div>
 
         <div className="ml-auto flex items-center gap-3 shrink-0">
-          <StepIndicator currentStepId={stepId} />
+          <CsvImportButton variant="header" onImported={handleHeaderCsvImport} />
           <button
             type="button"
             onClick={handleContinue}
@@ -128,6 +142,7 @@ export default function BulkChangePage({
           initialFilters={initialFilters}
           initialEmployeeIds={initialEmployeeIds}
           onSelectionChange={handleSelectionChange}
+          registerCsvImport={registerCsvImport}
         />
       )}
     </div>

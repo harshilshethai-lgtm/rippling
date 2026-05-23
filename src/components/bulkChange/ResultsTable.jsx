@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { AtSign, Filter as FilterIcon, X } from 'lucide-react'
+import { AtSign, Filter as FilterIcon, FileUp, X } from 'lucide-react'
 import { avatarClass, classNames, initials } from '../../lib/utils'
 import { FILTER_SCHEMA, formatStartDate } from './bulkChangeUtils'
 
@@ -10,7 +10,21 @@ const BODY_CELL = 'px-3 py-2.5'
 function SourceChip({ sources }) {
   const isMention = sources.includes('mention')
   const isFilter = sources.includes('filter')
+  const isCsv = sources.includes('csv')
 
+  // Tag order in label is intentionally fixed (Mention → CSV Import → Filter)
+  // so combinations always render the same way.
+  if (isCsv) {
+    const tail = []
+    if (isMention) tail.push('Mention')
+    if (isFilter) tail.push('Filter')
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-medium bg-violet-50 text-violet-700 border border-violet-200">
+        <FileUp size={10} strokeWidth={2} />
+        <span>CSV Import{tail.length > 0 ? ` · ${tail.join(' · ')}` : ''}</span>
+      </span>
+    )
+  }
   if (isMention && isFilter) {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-medium bg-rippling-chip text-rippling-plum">
@@ -42,11 +56,13 @@ export default function ResultsTable({
   poolSize,
   filterMatchCount,
   mentionedCount,
+  csvImportCount = 0,
   hiddenBySearchCount,
   onToggleRow,
   onSelectAll,
   onUnselectAll,
   onRemoveMention,
+  onRemoveManualSignals,
 }) {
   const selectedInView = useMemo(
     () => entries.reduce((count, { employee }) => (selectedIds.has(employee.id) ? count + 1 : count), 0),
@@ -122,6 +138,15 @@ export default function ResultsTable({
               <span>{filterMatchCount} from filters</span>
             </>
           )}
+          {csvImportCount > 0 && (
+            <>
+              <span aria-hidden>·</span>
+              <span className="inline-flex items-center gap-0.5">
+                {csvImportCount} from CSV
+                <FileUp size={10} strokeWidth={2} />
+              </span>
+            </>
+          )}
           {mentionedCount > 0 && (
             <>
               <span aria-hidden>·</span>
@@ -170,7 +195,14 @@ export default function ResultsTable({
           <tbody className="bg-white">
             {entries.map(({ employee, sources }) => {
               const isMention = sources.includes('mention')
+              const isCsv = sources.includes('csv')
+              const hasManualSignal = isMention || isCsv
               const isSelected = selectedIds.has(employee.id)
+              const removeLabel = isMention && isCsv
+                ? 'mention and CSV import'
+                : isMention
+                  ? 'mention'
+                  : 'CSV import'
               return (
                 <tr
                   key={employee.id}
@@ -228,13 +260,19 @@ export default function ResultsTable({
                     className={classNames(BODY_CELL, 'text-right')}
                     onClick={(event) => event.stopPropagation()}
                   >
-                    {isMention ? (
+                    {hasManualSignal ? (
                       <button
                         type="button"
-                        onClick={() => onRemoveMention?.(employee.id)}
+                        onClick={() => {
+                          if (onRemoveManualSignals) {
+                            onRemoveManualSignals(employee.id)
+                          } else if (isMention) {
+                            onRemoveMention?.(employee.id)
+                          }
+                        }}
                         className="h-7 w-7 rounded-md ui-interactive flex items-center justify-center text-rippling-muted hover:text-rippling-ink"
-                        aria-label={`Remove @${employee.fullName} from worklist`}
-                        title="Remove mention from worklist"
+                        aria-label={`Remove ${employee.fullName}'s ${removeLabel} from worklist`}
+                        title={`Remove ${removeLabel} from worklist`}
                       >
                         <X size={13} strokeWidth={2} />
                       </button>
