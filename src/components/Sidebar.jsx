@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Home,
   Users,
@@ -11,44 +11,83 @@ import {
   ShieldCheck,
   Settings,
   ChevronRight,
+  ChevronDown,
   PanelLeftClose,
   PanelLeftOpen,
 } from 'lucide-react'
 import { classNames } from '../lib/utils'
 
-const sections = [
-  {
-    label: null,
-    items: [{ icon: Home, label: 'Dashboard' }],
-  },
-  {
-    label: 'HR',
-    items: [
-      { icon: Users, label: 'People', active: true },
-      { icon: TrendingUp, label: 'Performance' },
-      { icon: Calendar, label: 'Time Off' },
-      { icon: Briefcase, label: 'Recruiting' },
-    ],
-  },
-  {
-    label: 'Finance',
-    items: [
-      { icon: CreditCard, label: 'Payroll' },
-      { icon: Heart, label: 'Benefits' },
-      { icon: ShieldCheck, label: 'Expenses' },
-    ],
-  },
-  {
-    label: 'IT',
-    items: [
-      { icon: Laptop, label: 'Devices' },
-      { icon: Settings, label: 'App Management' },
-    ],
-  },
+const PEOPLE_CHILDREN = [
+  { id: 'list', label: 'List', view: 'list' },
+  { id: 'bulk', label: 'Bulk Edit', view: 'worklists' },
 ]
 
-export default function Sidebar() {
+const PEOPLE_VIEWS = new Set(['list', 'worklists', 'profile', 'bulk'])
+
+function sectionsFor() {
+  return [
+    {
+      label: null,
+      items: [{ icon: Home, label: 'Dashboard', key: 'dashboard' }],
+    },
+    {
+      label: 'HR',
+      items: [
+        { icon: Users, label: 'People', key: 'people', children: PEOPLE_CHILDREN },
+        { icon: TrendingUp, label: 'Performance', key: 'performance' },
+        { icon: Calendar, label: 'Time Off', key: 'timeOff' },
+        { icon: Briefcase, label: 'Recruiting', key: 'recruiting' },
+      ],
+    },
+    {
+      label: 'Finance',
+      items: [
+        { icon: CreditCard, label: 'Payroll', key: 'payroll' },
+        { icon: Heart, label: 'Benefits', key: 'benefits' },
+        { icon: ShieldCheck, label: 'Expenses', key: 'expenses' },
+      ],
+    },
+    {
+      label: 'IT',
+      items: [
+        { icon: Laptop, label: 'Devices', key: 'devices' },
+        { icon: Settings, label: 'App Management', key: 'appManagement' },
+      ],
+    },
+  ]
+}
+
+export default function Sidebar({ currentView = 'list', onNavigate }) {
   const [collapsed, setCollapsed] = useState(false)
+  const sections = sectionsFor()
+
+  // Auto-expand People whenever its active child is the current view
+  const peopleActive = PEOPLE_VIEWS.has(currentView)
+  const [expanded, setExpanded] = useState({ people: peopleActive })
+
+  useEffect(() => {
+    if (peopleActive) {
+      setExpanded((prev) => (prev.people ? prev : { ...prev, people: true }))
+    }
+  }, [peopleActive])
+
+  function handleParentClick(item) {
+    if (!item.children) return
+    if (collapsed) {
+      // Collapsed sidebar: navigate to first child without toggling expansion
+      onNavigate?.(item.children[0].view)
+      return
+    }
+    const willExpand = !expanded[item.key]
+    setExpanded((prev) => ({ ...prev, [item.key]: willExpand }))
+    if (willExpand && item.children[0]?.view) {
+      onNavigate?.(item.children[0].view)
+    }
+  }
+
+  function handleChildClick(child) {
+    onNavigate?.(child.view)
+  }
 
   return (
     <aside
@@ -68,15 +107,38 @@ export default function Sidebar() {
                 {section.label}
               </div>
             )}
-            {section.items.map((item) => (
-              <NavItem
-                key={item.label}
-                icon={item.icon}
-                label={item.label}
-                active={item.active}
-                collapsed={collapsed}
-              />
-            ))}
+            {section.items.map((item) => {
+              const isPeople = item.key === 'people'
+              const parentActive = isPeople && peopleActive
+              const isExpanded = !!expanded[item.key]
+
+              return (
+                <div key={item.key ?? item.label}>
+                  <NavItem
+                    icon={item.icon}
+                    label={item.label}
+                    active={parentActive}
+                    collapsed={collapsed}
+                    hasChildren={!!item.children}
+                    expanded={isExpanded}
+                    onClick={() => handleParentClick(item)}
+                  />
+
+                  {item.children && !collapsed && isExpanded && (
+                    <div className="mt-0.5 mb-1 ml-7 border-l border-rippling-line-2 pl-2 space-y-0.5">
+                      {item.children.map((child) => (
+                        <ChildNavItem
+                          key={child.id}
+                          label={child.label}
+                          active={currentView === child.view}
+                          onClick={() => handleChildClick(child)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         ))}
       </nav>
@@ -118,13 +180,15 @@ export default function Sidebar() {
   )
 }
 
-function NavItem({ icon: Icon, label, active, collapsed }) {
+function NavItem({ icon: Icon, label, active, collapsed, hasChildren, expanded, onClick }) {
   return (
     <div className={classNames('relative group', collapsed && 'flex justify-center')}>
       <button
         type="button"
+        onClick={onClick}
         title={collapsed ? label : undefined}
         aria-label={label}
+        aria-expanded={hasChildren ? expanded : undefined}
         className={classNames(
           'flex items-center rounded-md text-[13px] transition-colors',
           collapsed ? 'w-9 h-9 justify-center' : 'gap-2.5 w-full px-2.5 py-1.5',
@@ -144,7 +208,15 @@ function NavItem({ icon: Icon, label, active, collapsed }) {
         {!collapsed && (
           <>
             <span className="flex-1 text-left whitespace-nowrap">{label}</span>
-            {active && <ChevronRight size={13} strokeWidth={2} className="shrink-0" />}
+            {hasChildren ? (
+              expanded ? (
+                <ChevronDown size={13} strokeWidth={2} className="shrink-0 text-rippling-muted" />
+              ) : (
+                <ChevronRight size={13} strokeWidth={2} className="shrink-0 text-rippling-muted" />
+              )
+            ) : (
+              active && <ChevronRight size={13} strokeWidth={2} className="shrink-0" />
+            )}
           </>
         )}
       </button>
@@ -157,5 +229,23 @@ function NavItem({ icon: Icon, label, active, collapsed }) {
         </span>
       )}
     </div>
+  )
+}
+
+function ChildNavItem({ label, active, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={classNames(
+        'flex items-center w-full px-2.5 py-1 rounded-md text-[12.5px] transition-colors text-left',
+        active
+          ? 'bg-rippling-chip text-rippling-plum font-medium'
+          : 'text-rippling-ink-2 ui-interactive hover:text-rippling-ink'
+      )}
+    >
+      <span className="flex-1 truncate">{label}</span>
+      {active && <ChevronRight size={12} strokeWidth={2} className="shrink-0" />}
+    </button>
   )
 }
