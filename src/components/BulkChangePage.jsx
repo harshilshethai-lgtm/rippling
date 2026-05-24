@@ -5,6 +5,7 @@ import DefineChangesStep from './bulkChange/DefineChangesStep'
 import StepIndicator, { BULK_CHANGE_STEPS } from './bulkChange/StepIndicator'
 import CsvImportButton from './bulkChange/csvImport/CsvImportButton'
 import { classNames } from '../lib/utils'
+import { upsertWorklist } from '../data/worklists'
 
 const EMPTY_FILTERS = {
   department: [],
@@ -30,6 +31,38 @@ export default function BulkChangePage({
   const [selectionStats, setSelectionStats] = useState(INITIAL_STATS)
   const [finalizedEmployeeIds, setFinalizedEmployeeIds] = useState([])
   const nameInputRef = useRef(null)
+  const worklistIdRef = useRef(null)
+
+  // Persist a Draft entry as soon as the user enters the bulk change flow.
+  // Subsequent useEffect calls update the same entry by id.
+  useEffect(() => {
+    if (worklistIdRef.current) return
+    const entry = upsertWorklist({
+      name: 'Untitled bulk change',
+      status: 'Draft',
+      bucket: 'drafts',
+      role: 'Lead',
+      leadName: WORKLIST_LEAD.name,
+      step: 'select',
+      peopleCount: 0,
+    })
+    worklistIdRef.current = entry.id
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Keep the persisted entry in sync with current editor state.
+  useEffect(() => {
+    if (!worklistIdRef.current) return
+    upsertWorklist({
+      id: worklistIdRef.current,
+      name: worklistName?.trim() ? worklistName : 'Untitled bulk change',
+      step: stepId,
+      peopleCount:
+        finalizedEmployeeIds.length > 0
+          ? finalizedEmployeeIds.length
+          : selectionStats.selected,
+    })
+  }, [worklistName, stepId, selectionStats.selected, finalizedEmployeeIds])
 
   const csvImportHandlerRef = useRef(null)
   const registerCsvImport = useCallback((handler) => {
