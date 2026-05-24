@@ -110,8 +110,9 @@ export default function UserSelectionStep({
       selected: selectedIds.size,
       filteredCount: filterMatchCount,
       mentionedCount: mentionedIds.size,
+      ids: [...selectedIds],
     })
-  }, [worklist.length, selectedIds.size, filterMatchCount, mentionedIds.size, onSelectionChange])
+  }, [worklist.length, selectedIds, filterMatchCount, mentionedIds.size, onSelectionChange])
 
   const attributeCounts = useMemo(() => {
     const counts = {}

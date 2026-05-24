@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   CircleHelp,
-  ChevronDown,
   ChevronRight,
   Clock3,
   Eye,
@@ -10,11 +9,11 @@ import {
   MoreHorizontal,
   Network,
   Pencil,
-  Search,
   X,
 } from 'lucide-react'
 import { EMPLOYEES } from '../data/employees'
 import { avatarClass, classNames, initials } from '../lib/utils'
+import FieldInput from './shared/FieldInput'
 
 const PROFILE_TABS = [
   'Role information',
@@ -39,8 +38,6 @@ const PROFILE_TABS = [
 ]
 
 const MASKED_VALUE = '••••••••••'
-const CONTROL_BASE =
-  'w-full h-8 border border-rippling-line rounded-md px-2.5 text-[13px] focus:outline-none focus:ring-1 focus:ring-rippling-primary focus:border-rippling-primary'
 
 const STATUS_STYLES = {
   Active: 'bg-green-50 text-green-700 border-green-200',
@@ -892,70 +889,3 @@ function EditRow({ label, children, hasInfo = false }) {
   )
 }
 
-function FieldInput({ field, onChange }) {
-  if (field.type === 'textarea') {
-    return (
-      <textarea
-        rows={3}
-        value={field.value}
-        onChange={(event) => onChange(event.target.value)}
-        className="w-full border border-rippling-line rounded-md px-2.5 py-2 text-[13px] resize-none focus:outline-none focus:ring-1 focus:ring-rippling-primary focus:border-rippling-primary"
-      />
-    )
-  }
-
-  if (field.type === 'select') {
-    return (
-      <div className="relative">
-        <select
-          value={field.value}
-          onChange={(event) => onChange(event.target.value)}
-          className={classNames(CONTROL_BASE, 'appearance-none pr-8')}
-        >
-          {(field.options || [field.value]).map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
-        <ChevronDown
-          size={13}
-          strokeWidth={2}
-          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-rippling-muted"
-        />
-      </div>
-    )
-  }
-
-  if (field.type === 'search-select') {
-    return (
-      <div className="relative">
-        <Search
-          size={13}
-          strokeWidth={1.9}
-          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-rippling-muted"
-        />
-        <input
-          type="text"
-          value={field.value}
-          onChange={(event) => onChange(event.target.value)}
-          className={classNames(CONTROL_BASE, 'pl-8 pr-8')}
-        />
-        <ChevronDown
-          size={13}
-          strokeWidth={2}
-          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-rippling-muted"
-        />
-      </div>
-    )
-  }
-
-  return (
-    <input
-      type={field.type === 'sensitive' ? 'text' : field.type}
-      value={field.value}
-      onChange={(event) => onChange(event.target.value)}
-      className={CONTROL_BASE}
-    />
-  )
-}

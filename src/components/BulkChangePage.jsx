@@ -15,7 +15,7 @@ const EMPTY_FILTERS = {
   status: [],
 }
 
-const INITIAL_STATS = { candidates: 0, selected: 0, filteredCount: 0, mentionedCount: 0 }
+const INITIAL_STATS = { candidates: 0, selected: 0, filteredCount: 0, mentionedCount: 0, ids: [] }
 
 // Minimal lead object representing whoever creates the worklist
 const WORKLIST_LEAD = { id: 'lead-me', name: 'Harshil Sheth', role: 'People Admin' }
@@ -88,8 +88,9 @@ export default function BulkChangePage({
 
   function handleContinue() {
     if (!canContinueFromSelect) return
-    // Freeze the selection so DefineChangesStep gets a stable count
-    setFinalizedEmployeeIds(Array.from({ length: selectionStats.selected }, (_, i) => i))
+    // Freeze the actual selected employee IDs so DefineChangesStep can render
+    // names, avatars, and look up current field values per employee.
+    setFinalizedEmployeeIds(selectionStats.ids ?? [])
     setStepId('changes')
   }
 
