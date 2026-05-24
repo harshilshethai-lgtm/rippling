@@ -85,20 +85,15 @@ function PeopleRow({ label, people, onAdd, onRemove, roleLabel }) {
             </button>
 
             {pickerOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onMouseDown={() => setPickerOpen(false)}
-                />
-                <MemberPickerPopover
-                  excludeIds={excludeIds}
-                  onSelect={(person) => {
-                    onAdd(person)
-                    setPickerOpen(false)
-                  }}
-                  onClose={() => setPickerOpen(false)}
-                />
-              </>
+              <MemberPickerPopover
+                anchorRef={buttonRef}
+                excludeIds={excludeIds}
+                onSelect={(person) => {
+                  onAdd(person)
+                  setPickerOpen(false)
+                }}
+                onClose={() => setPickerOpen(false)}
+              />
             )}
           </div>
         )}

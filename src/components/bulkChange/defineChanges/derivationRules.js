@@ -1,42 +1,8 @@
-import {
-  DollarSign,
-  Tag,
-  UserCog,
-  Briefcase,
-  MapPin,
-  Clock,
-  Layers,
-  Globe,
-  Shield,
-  Laptop,
-  FileText,
-  Users,
-  Building2,
-} from 'lucide-react'
-
-/**
- * Every field that can be changed in a bulk edit operation.
- * riskTier drives UI cues and downstream step depth.
- */
-export const CHANGE_FIELDS = [
-  { key: 'compensation', label: 'Compensation', section: 'Compensation', Icon: DollarSign, riskTier: 'high' },
-  { key: 'title', label: 'Title', section: 'Role', Icon: Tag, riskTier: 'medium' },
-  { key: 'level', label: 'Level', section: 'Role', Icon: Layers, riskTier: 'medium' },
-  { key: 'manager', label: 'Manager', section: 'Role', Icon: UserCog, riskTier: 'medium' },
-  { key: 'department', label: 'Department', section: 'Role', Icon: Briefcase, riskTier: 'medium' },
-  { key: 'workLocation', label: 'Work location', section: 'Role', Icon: MapPin, riskTier: 'medium' },
-  { key: 'employmentType', label: 'Employment type', section: 'Job', Icon: Clock, riskTier: 'high' },
-  { key: 'legalEntity', label: 'Legal entity', section: 'Job', Icon: Building2, riskTier: 'high' },
-  { key: 'visaStatus', label: 'Visa / work authorization', section: 'Personal', Icon: Globe, riskTier: 'high' },
-  { key: 'devices', label: 'Device assignment', section: 'IT', Icon: Laptop, riskTier: 'medium' },
-  { key: 'appAccess', label: 'App access', section: 'IT', Icon: Shield, riskTier: 'medium' },
-  { key: 'team', label: 'Team', section: 'Role', Icon: Users, riskTier: 'low' },
-  { key: 'documents', label: 'Required documents', section: 'Documents', Icon: FileText, riskTier: 'low' },
-]
-
 /**
  * Admin-configured rules: which observers, approvers, and process steps
- * are automatically injected when a given field is included in the change.
+ * are automatically injected when a given derivation key is included in
+ * the change. Field keys map onto these derivation keys via
+ * fieldSchema.js (each field carries an optional `derivationRuleKey`).
  *
  * In production these would be pulled from the Rippling Approvals/Workflow
  * config. For the prototype they are hard-coded.

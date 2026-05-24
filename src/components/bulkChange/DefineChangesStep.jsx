@@ -1,7 +1,10 @@
-import { useCallback, useState } from 'react'
-import ChangeFieldsCanvas from './defineChanges/ChangeFieldsCanvas'
+import { useCallback, useMemo, useState } from 'react'
+import { EMPLOYEES } from '../../data/employees'
+import ChangeFieldsFilterBar from './defineChanges/ChangeFieldsFilterBar'
+import ChangesTable from './defineChanges/ChangesTable'
 import PropertiesSidebar from './defineChanges/PropertiesSidebar'
 import { useDerivedContext } from './defineChanges/useDerivedContext'
+import { getDerivationKeysForFields } from './defineChanges/fieldSchema'
 
 const EMPTY_MANUAL_PEOPLE = {
   observers: [],
@@ -12,43 +15,122 @@ const EMPTY_MANUAL_PEOPLE = {
 /**
  * Step 2 of the Bulk Change wizard — "Define changes".
  *
- * Owns:
- *   - selectedFieldKeys  (Set<string>) which fields are being changed
- *   - manualPeople       observers/approvers/collaborators added manually
+ * Layout mirrors Step 1 (Select Users):
+ *   • Top bar: search across the employees in the worklist + chip row of
+ *     fields-to-edit + Add field
+ *   • Table: rows = the employees finalized in Step 1, columns = each chosen
+ *     field with an inline editor
+ *   • Right rail: existing PropertiesSidebar (Lead / Observers / Approvers
+ *     / Collaborators + Process) — derived from the active fields' rules.
  *
- * Derives via useDerivedContext:
- *   - auto observers/approvers from derivation rules
- *   - process steps
+ * State:
+ *   selectedFieldKeys: ordered list of field keys currently being edited
+ *   bulkValues:        column-level "apply to all" defaults, keyed by fieldKey
+ *   cellOverrides:     per-(empId, fieldKey) overrides that win over bulk
+ *   manualPeople:      manually added observers/approvers/collaborators
+ *
+ * Resolution per cell:
+ *   override → bulk default → current employee value
  */
-export default function DefineChangesStep({ selectedEmployeeIds = [], worklistName, lead }) {
-  const [selectedFieldKeys, setSelectedFieldKeys] = useState(new Set())
+export default function DefineChangesStep({ selectedEmployeeIds = [], lead }) {
+  const [selectedFieldKeys, setSelectedFieldKeys] = useState([])
+  const [bulkValues, setBulkValues] = useState({})
+  const [cellOverrides, setCellOverrides] = useState({})
+  const [search, setSearch] = useState('')
   const [manualPeople, setManualPeople] = useState(EMPTY_MANUAL_PEOPLE)
 
+  // ── Employees in worklist ────────────────────────────────────────────────
+
+  const employees = useMemo(() => {
+    if (selectedEmployeeIds.length === 0) return []
+    const idSet = new Set(selectedEmployeeIds)
+    return EMPLOYEES.filter((e) => idSet.has(e.id))
+  }, [selectedEmployeeIds])
+
+  const filteredEmployees = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return employees
+    return employees.filter((e) =>
+      `${e.fullName} ${e.title} ${e.email} ${e.department}`.toLowerCase().includes(q),
+    )
+  }, [employees, search])
+
+  // ── Derived context for sidebar ──────────────────────────────────────────
+
+  const derivationKeys = useMemo(
+    () => getDerivationKeysForFields(selectedFieldKeys),
+    [selectedFieldKeys],
+  )
   const { observers, approvers, collaborators, steps } = useDerivedContext(
-    [...selectedFieldKeys],
+    derivationKeys,
     manualPeople,
   )
 
-  // ── Field management ──────────────────────────────────────────────────────
+  // ── Field management ─────────────────────────────────────────────────────
 
-  const handleAddField = useCallback((key) => {
+  const handleAddFields = useCallback((keys) => {
     setSelectedFieldKeys((prev) => {
-      if (prev.has(key)) return prev
-      const next = new Set(prev)
-      next.add(key)
+      const seen = new Set(prev)
+      const next = [...prev]
+      for (const key of keys) {
+        if (!seen.has(key)) {
+          next.push(key)
+          seen.add(key)
+        }
+      }
       return next
     })
   }, [])
 
   const handleRemoveField = useCallback((key) => {
-    setSelectedFieldKeys((prev) => {
-      const next = new Set(prev)
-      next.delete(key)
+    setSelectedFieldKeys((prev) => prev.filter((k) => k !== key))
+    setBulkValues((prev) => {
+      if (!(key in prev)) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+    setCellOverrides((prev) => {
+      let changed = false
+      const next = {}
+      for (const [empId, fieldMap] of Object.entries(prev)) {
+        if (fieldMap && key in fieldMap) {
+          const { [key]: _, ...rest } = fieldMap
+          changed = true
+          if (Object.keys(rest).length > 0) next[empId] = rest
+        } else if (fieldMap && Object.keys(fieldMap).length > 0) {
+          next[empId] = fieldMap
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [])
+
+  const handleChangeBulkValue = useCallback((fieldKey, value) => {
+    setBulkValues((prev) => {
+      if (value === '' || value === undefined) {
+        if (!(fieldKey in prev)) return prev
+        const next = { ...prev }
+        delete next[fieldKey]
+        return next
+      }
+      return { ...prev, [fieldKey]: value }
+    })
+  }, [])
+
+  const handleChangeCell = useCallback((empId, fieldKey, value) => {
+    setCellOverrides((prev) => {
+      const existing = prev[empId] ?? {}
+      const next = { ...prev, [empId]: { ...existing, [fieldKey]: value } }
       return next
     })
   }, [])
 
-  // ── Manual people management ──────────────────────────────────────────────
+  const handleResetOverrides = useCallback(() => {
+    setCellOverrides({})
+  }, [])
+
+  // ── Manual people management ─────────────────────────────────────────────
 
   function addPerson(role, person) {
     setManualPeople((prev) => ({
@@ -71,14 +153,38 @@ export default function DefineChangesStep({ selectedEmployeeIds = [], worklistNa
   const handleAddCollaborator = useCallback((p) => addPerson('collaborators', p), [])
   const handleRemoveCollaborator = useCallback((id) => removePerson('collaborators', id), [])
 
+  // ── Render ───────────────────────────────────────────────────────────────
+
   return (
     <div className="flex-1 min-h-0 flex overflow-hidden">
-      <ChangeFieldsCanvas
-        selectedKeys={selectedFieldKeys}
-        onAddField={handleAddField}
-        onRemoveField={handleRemoveField}
-        employeeCount={selectedEmployeeIds.length}
-      />
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <div className="px-6 pt-4 pb-3 border-b border-rippling-line bg-white">
+          <ChangeFieldsFilterBar
+            search={search}
+            onSearchChange={setSearch}
+            selectedFieldKeys={selectedFieldKeys}
+            bulkValues={bulkValues}
+            onAddFields={handleAddFields}
+            onRemoveField={handleRemoveField}
+            onChangeBulkValue={handleChangeBulkValue}
+            employeeCount={employees.length}
+          />
+        </div>
+
+        <div className="flex-1 overflow-auto p-6 bg-rippling-surface">
+          <ChangesTable
+            employees={filteredEmployees}
+            selectedFieldKeys={selectedFieldKeys}
+            bulkValues={bulkValues}
+            cellOverrides={cellOverrides}
+            onChangeCell={handleChangeCell}
+            onRemoveField={handleRemoveField}
+            onResetOverrides={handleResetOverrides}
+            totalEmployees={employees.length}
+            hiddenBySearchCount={employees.length - filteredEmployees.length}
+          />
+        </div>
+      </div>
 
       <PropertiesSidebar
         lead={lead}

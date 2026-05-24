@@ -1,26 +1,65 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Search } from 'lucide-react'
 import { EMPLOYEES } from '../../../data/employees'
 import { avatarClass, classNames, initials } from '../../../lib/utils'
 
+const POPOVER_WIDTH = 288
+const POPOVER_MAX_HEIGHT = 320
+const POPOVER_GAP = 4
+
 /**
  * A floating popover for picking people from the EMPLOYEES list.
- * Adapted from MentionInput patterns so it matches the existing design language.
+ * Rendered via portal with fixed positioning so it escapes scrollable
+ * sidebar containers without causing layout shift.
  *
  * Props:
+ *   anchorRef         – ref to the trigger button used for positioning
  *   onSelect(person)  – called with { id, name, role } when a result is clicked
  *   onClose()         – called when the popover should be dismissed
  *   excludeIds        – Set of employee ids already in the list
  */
-export default function MemberPickerPopover({ onSelect, onClose, excludeIds = new Set() }) {
+export default function MemberPickerPopover({ anchorRef, onSelect, onClose, excludeIds = new Set() }) {
   const [query, setQuery] = useState('')
+  const [coords, setCoords] = useState({ top: 0, left: 0, placement: 'down' })
   const inputRef = useRef(null)
+  const popoverRef = useRef(null)
+
+  useLayoutEffect(() => {
+    function update() {
+      const anchor = anchorRef?.current
+      if (!anchor) return
+
+      const rect = anchor.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - rect.bottom
+      const placement =
+        spaceBelow < POPOVER_MAX_HEIGHT && rect.top > spaceBelow ? 'up' : 'down'
+
+      let left = rect.left
+      const overflowRight = left + POPOVER_WIDTH - window.innerWidth + 8
+      if (overflowRight > 0) left = Math.max(8, left - overflowRight)
+
+      const top =
+        placement === 'down'
+          ? rect.bottom + POPOVER_GAP
+          : rect.top - POPOVER_GAP
+
+      setCoords({ top, left, placement })
+    }
+
+    update()
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('resize', update)
+    }
+  }, [anchorRef])
 
   useEffect(() => {
-    inputRef.current?.focus()
+    inputRef.current?.focus({ preventScroll: true })
   }, [])
 
-  // Close on Escape
   useEffect(() => {
     function handleKey(e) {
       if (e.key === 'Escape') onClose()
@@ -28,6 +67,17 @@ export default function MemberPickerPopover({ onSelect, onClose, excludeIds = ne
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
   }, [onClose])
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      const anchor = anchorRef?.current
+      if (anchor?.contains(e.target)) return
+      if (popoverRef.current?.contains(e.target)) return
+      onClose()
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [anchorRef, onClose])
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -42,12 +92,23 @@ export default function MemberPickerPopover({ onSelect, onClose, excludeIds = ne
     }).slice(0, 8)
   }, [query, excludeIds])
 
-  return (
+  return createPortal(
     <div
-      className="absolute z-50 left-0 top-full mt-1 w-72 rounded-lg border border-rippling-line bg-white shadow-rippling-dropdown"
+      ref={popoverRef}
+      style={{
+        position: 'fixed',
+        top: coords.placement === 'down' ? coords.top : undefined,
+        bottom:
+          coords.placement === 'up'
+            ? window.innerHeight - coords.top
+            : undefined,
+        left: coords.left,
+        width: POPOVER_WIDTH,
+        zIndex: 1000,
+      }}
+      className="rounded-lg border border-rippling-line bg-white shadow-rippling-dropdown"
       onMouseDown={(e) => e.stopPropagation()}
     >
-      {/* Search input */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-rippling-line">
         <Search size={13} strokeWidth={1.75} className="text-rippling-muted shrink-0" />
         <input
@@ -59,7 +120,6 @@ export default function MemberPickerPopover({ onSelect, onClose, excludeIds = ne
         />
       </div>
 
-      {/* Results */}
       <ul className="py-1 max-h-56 overflow-y-auto">
         {results.length === 0 ? (
           <li className="px-3 py-3 text-[12px] text-rippling-muted text-center">No results</li>
@@ -92,6 +152,7 @@ export default function MemberPickerPopover({ onSelect, onClose, excludeIds = ne
           ))
         )}
       </ul>
-    </div>
+    </div>,
+    document.body,
   )
 }

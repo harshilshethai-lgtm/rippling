@@ -3,7 +3,7 @@
 //
 // This is a prototype: state is *not* persisted across reloads.
 
-import { CHANGE_FIELDS } from '../components/bulkChange/defineChanges/derivationRules'
+import { FIELDS_BY_KEY } from '../components/bulkChange/defineChanges/fieldSchema'
 
 export const BUCKETS = [
   { id: 'drafts', label: 'Drafts' },
@@ -112,13 +112,13 @@ export function intentFromFieldKeys(fieldKeys) {
 
   const sections = new Set()
   for (const key of fieldKeys) {
-    const field = CHANGE_FIELDS.find((f) => f.key === key)
-    if (field) sections.add(field.section)
+    const meta = FIELDS_BY_KEY.get(key)
+    if (meta) sections.add(meta.sectionLabel)
   }
 
   if (fieldKeys.length === 1) {
-    const field = CHANGE_FIELDS.find((f) => f.key === fieldKeys[0])
-    return field ? `${field.label} change` : 'Field change'
+    const meta = FIELDS_BY_KEY.get(fieldKeys[0])
+    return meta ? `${meta.label} change` : 'Field change'
   }
 
   if (sections.size === 1) {
@@ -144,8 +144,8 @@ function seed() {
       bucket: 'needsApproval',
       role: 'Lead',
       status: STATUS_BY_BUCKET.needsApproval,
-      intent: 'Compensation change',
-      fieldKeys: ['compensation', 'title', 'level'],
+      intent: 'My pay change',
+      fieldKeys: ['baseCompensation', 'title', 'level'],
       peopleCount: 24,
       leadName: 'Harshil Sheth',
       approvers: [{ name: 'Noah Thompson' }, { name: 'Rachel Kim' }],
@@ -173,7 +173,7 @@ function seed() {
       role: 'Approver',
       status: STATUS_BY_BUCKET.contributor,
       intent: 'Employment type change',
-      fieldKeys: ['employmentType', 'compensation'],
+      fieldKeys: ['employmentType', 'baseCompensation'],
       peopleCount: 6,
       leadName: 'Sarah Johnson',
       approvers: [{ name: 'Rachel Kim' }, { name: 'Noah Thompson' }],
@@ -200,8 +200,8 @@ function seed() {
       bucket: 'complete',
       role: 'Lead',
       status: STATUS_BY_BUCKET.complete,
-      intent: 'Compensation change',
-      fieldKeys: ['compensation'],
+      intent: 'Base compensation change',
+      fieldKeys: ['baseCompensation'],
       peopleCount: 412,
       leadName: 'Harshil Sheth',
       approvers: [{ name: 'Noah Thompson' }, { name: 'Rachel Kim' }],
