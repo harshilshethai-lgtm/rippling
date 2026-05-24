@@ -3,7 +3,8 @@ import { classNames } from '../../lib/utils'
 
 export const BULK_CHANGE_STEPS = [
   { id: 'select', label: 'Select people' },
-  { id: 'changes', label: 'Define changes' },
+  { id: 'define', label: 'Define change set' },
+  { id: 'edit', label: 'Make changes' },
   { id: 'review', label: 'Review & apply' },
 ]
 

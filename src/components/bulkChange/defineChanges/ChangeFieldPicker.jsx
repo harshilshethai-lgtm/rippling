@@ -86,6 +86,26 @@ export default function ChangeFieldPicker({
     return list
   }, [activeSection, fieldQuery])
 
+  const selectableVisibleFields = useMemo(
+    () => visibleFields.filter((field) => !alreadyAddedSet.has(field.key)),
+    [visibleFields, alreadyAddedSet],
+  )
+
+  const selectableVisibleKeys = useMemo(
+    () => selectableVisibleFields.map((field) => field.key),
+    [selectableVisibleFields],
+  )
+
+  const selectedVisibleCount = useMemo(
+    () => selectableVisibleKeys.filter((key) => selectedKeys.includes(key)).length,
+    [selectableVisibleKeys, selectedKeys],
+  )
+
+  const allVisibleSelected =
+    selectableVisibleKeys.length > 0 &&
+    selectedVisibleCount === selectableVisibleKeys.length
+  const someVisibleSelected = selectedVisibleCount > 0 && !allVisibleSelected
+
   useEffect(() => {
     setHighlightIndex(0)
   }, [pane, sectionQuery, fieldQuery, sectionId])
@@ -104,6 +124,27 @@ export default function ChangeFieldPicker({
         ? previous.filter((k) => k !== fieldKey)
         : [...previous, fieldKey],
     )
+  }
+
+  function selectAllVisible() {
+    if (selectableVisibleKeys.length === 0) return
+    setSelectedKeys((previous) => {
+      const next = new Set(previous)
+      for (const key of selectableVisibleKeys) next.add(key)
+      return [...next]
+    })
+  }
+
+  function unselectAllVisible() {
+    if (selectableVisibleKeys.length === 0) return
+    setSelectedKeys((previous) =>
+      previous.filter((key) => !selectableVisibleKeys.includes(key)),
+    )
+  }
+
+  function toggleSelectAllVisible() {
+    if (allVisibleSelected) unselectAllVisible()
+    else selectAllVisible()
   }
 
   function handleApply() {
@@ -256,6 +297,33 @@ export default function ChangeFieldPicker({
               />
             </div>
           </div>
+
+          {selectableVisibleFields.length > 0 && (
+            <div className="px-2.5 py-1.5 border-b border-rippling-line-2">
+              <button
+                type="button"
+                onClick={toggleSelectAllVisible}
+                className="w-full flex items-center gap-2.5 h-8 px-1 -mx-1 text-[12.5px] text-rippling-ink-2 ui-interactive rounded-md"
+                aria-label={allVisibleSelected ? 'Unselect all visible fields' : 'Select all visible fields'}
+              >
+                <input
+                  type="checkbox"
+                  readOnly
+                  tabIndex={-1}
+                  checked={allVisibleSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = someVisibleSelected
+                  }}
+                  className="rippling-checkbox pointer-events-none"
+                  aria-hidden
+                />
+                <span className="font-medium">Select all</span>
+                <span className="ml-auto text-[11px] tabular-nums text-rippling-muted">
+                  {selectedVisibleCount}/{selectableVisibleFields.length}
+                </span>
+              </button>
+            </div>
+          )}
 
           <div className="py-1 max-h-[280px] overflow-y-auto">
             {visibleFields.length === 0 && (

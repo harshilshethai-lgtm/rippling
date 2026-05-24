@@ -1,149 +1,135 @@
 import { useEffect, useRef, useState } from 'react'
-import { Plus, Search, Sparkles, X } from 'lucide-react'
+import { SlidersHorizontal, User, Users, X } from 'lucide-react'
 import { classNames } from '../../../lib/utils'
 import { FIELDS_BY_KEY } from './fieldSchema'
-import ChangeFieldPicker from './ChangeFieldPicker'
 import FieldInput from '../../shared/FieldInput'
+import ChangeComposer from './ChangeComposer'
+import TrimFieldsPanel from './TrimFieldsPanel'
 
 /**
- * Top bar for Define Changes. Visually mirrors LinearFilterBar so the page
- * feels like a sibling of Select Users — but the chips here represent
- * fields being edited (not filters narrowing employees).
+ * Pure "changeset builder" — composer + chip row + trim panel.
  *
- *   • Search input on top — filters the employees in the editable table by
- *     name.
- *   • Chip row — one chip per selected field. Click chip to set/edit the
- *     "apply to all" bulk default. X removes the field.
- *   • + Add field button — opens ChangeFieldPicker.
- *   • Ask AI button — placeholder for natural-language change prompts.
+ * Used by:
+ *   • DefineChangeSetStep — as the only meaningful content of the page
+ *   • MakeChangesStep      — as a header strip above the editable table
+ *
+ * Layout:
+ *   1. Composer — AI-first input that accepts free text, "/" (templates),
+ *      and "@" (fields). See ChangeComposer.jsx.
+ *   2. Chip row — one chip per field being edited, each with a Uniform /
+ *      Unique mode toggle and (when Uniform) an inline value editor. A
+ *      "Modify" button appears when >=5 chips exist so the user can
+ *      bulk-trim the set in one go.
+ *
+ * Variant prop:
+ *   • "expanded" (default) — large composer with the empty-state template
+ *     gallery if no chips. Used on the Define page.
+ *   • "compact"  — single-row composer, no gallery. Used above the table on
+ *     the Make Changes page.
  */
 export default function ChangeFieldsFilterBar({
-  search,
-  onSearchChange,
   selectedFieldKeys,
   bulkValues,
+  uniformByField,
   onAddFields,
+  onApplyTemplate,
   onRemoveField,
+  onRemoveFields,
   onChangeBulkValue,
-  employeeCount,
+  onToggleUniform,
+  variant = 'expanded',
 }) {
-  const [pickerOpen, setPickerOpen] = useState(false)
   const [editingChipKey, setEditingChipKey] = useState(null)
-  const addButtonRef = useRef(null)
+  const [trimOpen, setTrimOpen] = useState(false)
+  const trimAnchorRef = useRef(null)
 
-  // Keyboard shortcut: "/" to open the picker, mirrors LinearFilterBar.
-  useEffect(() => {
-    function onKeyDown(event) {
-      const target = event.target
-      const tag = target?.tagName
-      const isTextInput =
-        tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable
-      if (
-        event.key === '/' &&
-        !event.metaKey &&
-        !event.ctrlKey &&
-        !event.altKey &&
-        !isTextInput
-      ) {
-        event.preventDefault()
-        setPickerOpen(true)
-        addButtonRef.current?.focus()
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  const showModify = selectedFieldKeys.length >= 5
+  // On the Make Changes page the composer is always compact so it doesn't
+  // dominate the screen real-estate above the table.
+  const composerVariant =
+    variant === 'compact' || selectedFieldKeys.length > 0 ? 'compact' : 'empty'
 
-  function handleApplyPicker(keys) {
-    onAddFields?.(keys)
-    setPickerOpen(false)
+  function handleTrimApply(keysToRemove) {
+    if (keysToRemove.length > 0) onRemoveFields?.(keysToRemove)
+    setTrimOpen(false)
   }
 
   return (
-    <div className="space-y-2">
-      {/* Employee search */}
-      <div className="relative">
-        <Search
-          size={14}
-          strokeWidth={1.9}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-rippling-muted"
-        />
-        <input
-          type="text"
-          value={search}
-          onChange={(event) => onSearchChange?.(event.target.value)}
-          placeholder={`Search ${employeeCount} ${
-            employeeCount === 1 ? 'employee' : 'employees'
-          } in worklist...`}
-          className="w-full h-9 pl-9 pr-3 text-[13px] rounded-md bg-rippling-surface border border-transparent placeholder:text-rippling-muted focus:outline-none focus:bg-white focus:border-rippling-line transition-colors"
-        />
-      </div>
+    <div className="space-y-3">
+      {/* Composer */}
+      <ChangeComposer
+        variant={composerVariant}
+        alreadySelectedKeys={selectedFieldKeys}
+        onApplyTemplate={onApplyTemplate}
+        onAddFields={onAddFields}
+      />
 
-      {/* Field chips + Add field button */}
-      <div className="relative">
-        <div className="flex items-start gap-1.5 flex-wrap min-h-[28px]">
-          {selectedFieldKeys.map((fieldKey) => {
-            const meta = FIELDS_BY_KEY.get(fieldKey)
-            if (!meta) return null
-            const Icon = meta.sectionIcon
-            const bulkValue = bulkValues?.[fieldKey]
-            const hasBulk = bulkValue !== undefined && bulkValue !== ''
-            return (
-              <FieldChip
-                key={fieldKey}
-                fieldKey={fieldKey}
-                meta={meta}
-                Icon={Icon}
-                bulkValue={bulkValue}
-                hasBulk={hasBulk}
-                editing={editingChipKey === fieldKey}
-                onOpenEditor={() => setEditingChipKey(fieldKey)}
-                onCloseEditor={() => setEditingChipKey(null)}
-                onChangeBulkValue={(value) => onChangeBulkValue?.(fieldKey, value)}
-                onRemove={() => {
-                  onRemoveField?.(fieldKey)
-                  if (editingChipKey === fieldKey) setEditingChipKey(null)
-                }}
-              />
-            )
-          })}
+      {/* Chip row */}
+      {selectedFieldKeys.length > 0 && (
+        <div className="relative">
+          <div className="flex items-start gap-1.5 flex-wrap min-h-[28px]">
+            {selectedFieldKeys.map((fieldKey) => {
+              const meta = FIELDS_BY_KEY.get(fieldKey)
+              if (!meta) return null
+              const Icon = meta.sectionIcon
+              const mode = uniformByField?.[fieldKey] ?? 'uniform'
+              const bulkValue = bulkValues?.[fieldKey]
+              const hasBulk =
+                mode === 'uniform' && bulkValue !== undefined && bulkValue !== ''
+              return (
+                <FieldChip
+                  key={fieldKey}
+                  fieldKey={fieldKey}
+                  meta={meta}
+                  Icon={Icon}
+                  mode={mode}
+                  bulkValue={bulkValue}
+                  hasBulk={hasBulk}
+                  editing={editingChipKey === fieldKey}
+                  onOpenEditor={() => setEditingChipKey(fieldKey)}
+                  onCloseEditor={() => setEditingChipKey(null)}
+                  onToggleMode={() => onToggleUniform?.(fieldKey)}
+                  onChangeBulkValue={(value) => onChangeBulkValue?.(fieldKey, value)}
+                  onRemove={() => {
+                    onRemoveField?.(fieldKey)
+                    if (editingChipKey === fieldKey) setEditingChipKey(null)
+                  }}
+                />
+              )
+            })}
 
-          <button
-            ref={addButtonRef}
-            type="button"
-            onClick={() => setPickerOpen(true)}
-            className={classNames(
-              'inline-flex items-center gap-1 h-7 px-2 rounded-full border border-dashed text-[12px] font-medium transition-colors',
-              pickerOpen
-                ? 'border-rippling-plum/50 bg-rippling-chip text-rippling-plum'
-                : 'border-rippling-line text-rippling-muted hover:text-rippling-ink-2 hover:border-rippling-ink-2/30',
+            {showModify && (
+              <div ref={trimAnchorRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setTrimOpen((v) => !v)}
+                  className={classNames(
+                    'inline-flex items-center gap-1 h-7 px-2.5 rounded-full border text-[12px] font-medium transition-colors',
+                    trimOpen
+                      ? 'border-rippling-plum/40 bg-rippling-chip text-rippling-plum'
+                      : 'border-rippling-line text-rippling-ink-2 hover:bg-rippling-surface-2',
+                  )}
+                  aria-expanded={trimOpen}
+                >
+                  <SlidersHorizontal size={11} strokeWidth={1.9} />
+                  <span>Modify</span>
+                  <span className="text-rippling-muted tabular-nums">
+                    {selectedFieldKeys.length}
+                  </span>
+                </button>
+
+                <TrimFieldsPanel
+                  open={trimOpen}
+                  selectedFieldKeys={selectedFieldKeys}
+                  bulkValues={bulkValues}
+                  onClose={() => setTrimOpen(false)}
+                  onApply={handleTrimApply}
+                />
+              </div>
             )}
-          >
-            <Plus size={12} strokeWidth={2} />
-            <span>Add field</span>
-            <span className="ml-1 text-[10px] text-rippling-muted">/</span>
-          </button>
-
-          <button
-            type="button"
-            disabled
-            title="Ask AI — coming soon"
-            className="inline-flex items-center gap-1 h-7 px-2 rounded-full border border-dashed border-purple-200 bg-purple-50/60 text-rippling-plum/70 text-[12px] font-medium cursor-not-allowed opacity-70"
-            aria-label="Ask AI to fill changes (coming soon)"
-          >
-            <Sparkles size={12} strokeWidth={2} className="text-rippling-primary" />
-            <span>Ask AI</span>
-          </button>
+          </div>
         </div>
-
-        <ChangeFieldPicker
-          open={pickerOpen}
-          anchorMode="left"
-          alreadySelectedKeys={selectedFieldKeys}
-          onClose={() => setPickerOpen(false)}
-          onApply={handleApplyPicker}
-        />
-      </div>
+      )}
     </div>
   )
 }
@@ -151,16 +137,19 @@ export default function ChangeFieldsFilterBar({
 function FieldChip({
   meta,
   Icon,
+  mode,
   bulkValue,
   hasBulk,
   editing,
   onOpenEditor,
   onCloseEditor,
+  onToggleMode,
   onChangeBulkValue,
   onRemove,
 }) {
   const popoverRef = useRef(null)
   const [draft, setDraft] = useState(bulkValue ?? '')
+  const isUniform = mode === 'uniform'
 
   useEffect(() => {
     if (editing) setDraft(bulkValue ?? '')
@@ -194,20 +183,33 @@ function FieldChip({
     onCloseEditor()
   }
 
+  // The Uniform/Unique toggle is the heart of the chip: in Uniform mode the
+  // chip surfaces an inline value editor; in Unique mode it collapses and
+  // the user sets each row in the table.
   return (
     <span className="relative inline-flex">
       <span
         className={classNames(
-          'group inline-flex items-center h-7 rounded-full border text-[12px] overflow-hidden transition-colors',
+          'group inline-flex items-stretch h-7 rounded-full border text-[12px] overflow-hidden transition-colors',
           hasBulk
             ? 'bg-rippling-chip border-rippling-plum/30 text-rippling-plum'
             : 'bg-white border-rippling-line text-rippling-ink-2',
         )}
       >
+        {/* Label / value (clickable when Uniform) */}
         <button
           type="button"
-          onClick={onOpenEditor}
-          className="flex items-center gap-1.5 h-full px-2 ui-interactive"
+          onClick={isUniform ? onOpenEditor : undefined}
+          disabled={!isUniform}
+          className={classNames(
+            'flex items-center gap-1.5 h-full px-2',
+            isUniform ? 'ui-interactive' : 'cursor-default',
+          )}
+          title={
+            isUniform
+              ? 'Click to set the value used for everyone'
+              : 'Per-person values — set in the table below'
+          }
         >
           {Icon && (
             <Icon
@@ -219,15 +221,54 @@ function FieldChip({
           <span className={hasBulk ? 'text-rippling-plum/80' : 'text-rippling-muted'}>
             {meta.label}
           </span>
-          {hasBulk ? (
-            <>
-              <span className="text-rippling-plum/60">→</span>
-              <span className="font-medium truncate max-w-[180px]">{String(bulkValue)}</span>
-            </>
+          {isUniform ? (
+            hasBulk ? (
+              <>
+                <span className="text-rippling-plum/60">→</span>
+                <span className="font-medium truncate max-w-[180px]">
+                  {String(bulkValue)}
+                </span>
+              </>
+            ) : (
+              <span className="text-rippling-muted/80 italic">Set value…</span>
+            )
           ) : (
-            <span className="text-rippling-muted/80 italic">Set value…</span>
+            <span className="text-rippling-muted/80 italic">Per person</span>
           )}
         </button>
+
+        {/* Mode toggle */}
+        <button
+          type="button"
+          onClick={onToggleMode}
+          className={classNames(
+            'h-full px-1.5 ui-interactive flex items-center gap-1 border-l',
+            hasBulk
+              ? 'border-rippling-plum/20 text-rippling-plum/70 hover:text-rippling-plum'
+              : 'border-rippling-line-2 text-rippling-muted hover:text-rippling-ink',
+          )}
+          aria-label={
+            isUniform
+              ? 'Switch to per-person values'
+              : 'Switch to the same value for everyone'
+          }
+          title={
+            isUniform
+              ? 'Currently: same for all. Click for per-person.'
+              : 'Currently: per person. Click for same-for-all.'
+          }
+        >
+          {isUniform ? (
+            <Users size={11} strokeWidth={1.9} />
+          ) : (
+            <User size={11} strokeWidth={1.9} />
+          )}
+          <span className="text-[10.5px] font-medium uppercase tracking-wide">
+            {isUniform ? 'All' : 'Each'}
+          </span>
+        </button>
+
+        {/* Remove */}
         <button
           type="button"
           onClick={onRemove}
@@ -243,7 +284,7 @@ function FieldChip({
         </button>
       </span>
 
-      {editing && (
+      {editing && isUniform && (
         <div
           ref={popoverRef}
           className="absolute z-30 left-0 top-full mt-2 w-[280px] rounded-xl border border-rippling-line bg-white shadow-rippling-dropdown anim-slide-in-bottom p-3"
