@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, Pencil } from 'lucide-react'
 import UserSelectionStep from './bulkChange/UserSelectionStep'
-import DefineChangesStep from './bulkChange/DefineChangesStep'
+import DefineChangeSetStep from './bulkChange/DefineChangeSetStep'
+import MakeChangesStep from './bulkChange/MakeChangesStep'
 import StepIndicator, { BULK_CHANGE_STEPS } from './bulkChange/StepIndicator'
 import CsvImportButton from './bulkChange/csvImport/CsvImportButton'
 import { classNames } from '../lib/utils'
@@ -17,9 +18,35 @@ const EMPTY_FILTERS = {
 
 const INITIAL_STATS = { candidates: 0, selected: 0, filteredCount: 0, mentionedCount: 0, ids: [] }
 
+const EMPTY_MANUAL_PEOPLE = {
+  observers: [],
+  approvers: [],
+  collaborators: [],
+}
+
 // Minimal lead object representing whoever creates the worklist
 const WORKLIST_LEAD = { id: 'lead-me', name: 'Harshil Sheth', role: 'People Admin' }
 
+/**
+ * Orchestrates the four-step Bulk Change wizard:
+ *   1. select   — pick people
+ *   2. define   — pick fields (the "change set")
+ *   3. edit     — fill in per-row values in the table
+ *   4. review   — (future) preview + apply
+ *
+ * Changeset state (selectedFieldKeys, bulkValues, cellOverrides,
+ * uniformByField, manualPeople) lives here, not in the child steps, so the
+ * user can move forward/back between Define and Make Changes without
+ * losing any progress.
+ *
+ * Per-column resolution contract (see MakeChangesStep / ChangesTable):
+ *   Uniform: override → bulk default → current employee value
+ *   Unique:  override → current employee value
+ *
+ * Toggling a column to Unique never wipes its bulkValues entry — flipping
+ * back to Uniform restores the previous "apply to all" value. This is the
+ * non-destructive mode contract.
+ */
 export default function BulkChangePage({
   onNavigate,
   initialEmployeeIds = [],
@@ -30,6 +57,15 @@ export default function BulkChangePage({
   const [stepId, setStepId] = useState('select')
   const [selectionStats, setSelectionStats] = useState(INITIAL_STATS)
   const [finalizedEmployeeIds, setFinalizedEmployeeIds] = useState([])
+
+  // Changeset state — lives at the wizard level so it persists across the
+  // Define ↔ Make Changes navigation.
+  const [selectedFieldKeys, setSelectedFieldKeys] = useState([])
+  const [bulkValues, setBulkValues] = useState({})
+  const [cellOverrides, setCellOverrides] = useState({})
+  const [uniformByField, setUniformByField] = useState({})
+  const [manualPeople, setManualPeople] = useState(EMPTY_MANUAL_PEOPLE)
+
   const nameInputRef = useRef(null)
   const worklistIdRef = useRef(null)
 
@@ -82,21 +118,231 @@ export default function BulkChangePage({
     setSelectionStats(stats)
   }, [])
 
+  // ── Step transitions ────────────────────────────────────────────────────
+
   const canContinueFromSelect = selectionStats.selected > 0 && stepId === 'select'
+  const canContinueFromDefine = selectedFieldKeys.length > 0 && stepId === 'define'
   const showRatio =
     selectionStats.selected > 0 && selectionStats.selected !== selectionStats.candidates
 
   function handleContinue() {
-    if (!canContinueFromSelect) return
-    // Freeze the actual selected employee IDs so DefineChangesStep can render
-    // names, avatars, and look up current field values per employee.
-    setFinalizedEmployeeIds(selectionStats.ids ?? [])
-    setStepId('changes')
+    if (stepId === 'select' && canContinueFromSelect) {
+      // Freeze the actual selected employee IDs so MakeChangesStep can
+      // render names, avatars, and look up current field values per
+      // employee.
+      setFinalizedEmployeeIds(selectionStats.ids ?? [])
+      setStepId('define')
+      return
+    }
+    if (stepId === 'define' && canContinueFromDefine) {
+      setStepId('edit')
+    }
   }
 
-  function handleBackToSelect() {
-    setStepId('select')
+  function handleBack() {
+    if (stepId === 'edit') {
+      setStepId('define')
+      return
+    }
+    if (stepId === 'define') {
+      setStepId('select')
+      return
+    }
+    onNavigate({ name: 'list' })
   }
+
+  // ── Field management ────────────────────────────────────────────────────
+
+  const handleAddFields = useCallback((keys) => {
+    setSelectedFieldKeys((prev) => {
+      const seen = new Set(prev)
+      const next = [...prev]
+      for (const key of keys) {
+        if (!seen.has(key)) {
+          next.push(key)
+          seen.add(key)
+        }
+      }
+      return next
+    })
+  }, [])
+
+  // Apply a whole template in one shot — adds the fieldKeys (de-duped) and
+  // seeds bulkValues from the template's `defaults` for keys that don't yet
+  // have a value. Doesn't clobber a value the user already typed.
+  const handleApplyTemplate = useCallback((template) => {
+    if (!template) return
+    const incoming = template.fieldKeys ?? []
+    setSelectedFieldKeys((prev) => {
+      const seen = new Set(prev)
+      const next = [...prev]
+      for (const key of incoming) {
+        if (!seen.has(key)) {
+          next.push(key)
+          seen.add(key)
+        }
+      }
+      return next
+    })
+    if (template.defaults && Object.keys(template.defaults).length > 0) {
+      setBulkValues((prev) => {
+        const next = { ...prev }
+        for (const [k, v] of Object.entries(template.defaults)) {
+          if (next[k] === undefined || next[k] === '') next[k] = v
+        }
+        return next
+      })
+    }
+  }, [])
+
+  const handleRemoveField = useCallback((key) => {
+    setSelectedFieldKeys((prev) => prev.filter((k) => k !== key))
+    setBulkValues((prev) => {
+      if (!(key in prev)) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+    setUniformByField((prev) => {
+      if (!(key in prev)) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+    setCellOverrides((prev) => {
+      let changed = false
+      const next = {}
+      for (const [empId, fieldMap] of Object.entries(prev)) {
+        if (fieldMap && key in fieldMap) {
+          const { [key]: _, ...rest } = fieldMap
+          changed = true
+          if (Object.keys(rest).length > 0) next[empId] = rest
+        } else if (fieldMap && Object.keys(fieldMap).length > 0) {
+          next[empId] = fieldMap
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [])
+
+  // Bulk-remove (used by the Modify trim panel) so the table only re-renders
+  // once when the user drops many fields at once.
+  const handleRemoveFields = useCallback((keys) => {
+    if (!keys || keys.length === 0) return
+    const keySet = new Set(keys)
+    setSelectedFieldKeys((prev) => prev.filter((k) => !keySet.has(k)))
+    setBulkValues((prev) => {
+      let changed = false
+      const next = {}
+      for (const [k, v] of Object.entries(prev)) {
+        if (keySet.has(k)) {
+          changed = true
+          continue
+        }
+        next[k] = v
+      }
+      return changed ? next : prev
+    })
+    setUniformByField((prev) => {
+      let changed = false
+      const next = {}
+      for (const [k, v] of Object.entries(prev)) {
+        if (keySet.has(k)) {
+          changed = true
+          continue
+        }
+        next[k] = v
+      }
+      return changed ? next : prev
+    })
+    setCellOverrides((prev) => {
+      let changed = false
+      const next = {}
+      for (const [empId, fieldMap] of Object.entries(prev)) {
+        if (!fieldMap) continue
+        const filtered = {}
+        for (const [k, v] of Object.entries(fieldMap)) {
+          if (keySet.has(k)) {
+            changed = true
+            continue
+          }
+          filtered[k] = v
+        }
+        if (Object.keys(filtered).length > 0) next[empId] = filtered
+      }
+      return changed ? next : prev
+    })
+  }, [])
+
+  const handleChangeBulkValue = useCallback((fieldKey, value) => {
+    setBulkValues((prev) => {
+      if (value === '' || value === undefined) {
+        if (!(fieldKey in prev)) return prev
+        const next = { ...prev }
+        delete next[fieldKey]
+        return next
+      }
+      return { ...prev, [fieldKey]: value }
+    })
+  }, [])
+
+  const handleChangeCell = useCallback((empId, fieldKey, value) => {
+    setCellOverrides((prev) => {
+      const existing = prev[empId] ?? {}
+      const next = { ...prev, [empId]: { ...existing, [fieldKey]: value } }
+      return next
+    })
+  }, [])
+
+  const handleResetOverrides = useCallback(() => {
+    setCellOverrides({})
+  }, [])
+
+  // Toggle a column between 'uniform' and 'unique' modes. We intentionally
+  // keep `bulkValues[fieldKey]` untouched on the toggle so flipping back to
+  // Uniform restores the previous "apply to all" value.
+  const handleToggleUniform = useCallback((fieldKey) => {
+    setUniformByField((prev) => {
+      const current = prev[fieldKey] ?? 'uniform'
+      const nextMode = current === 'uniform' ? 'unique' : 'uniform'
+      return { ...prev, [fieldKey]: nextMode }
+    })
+  }, [])
+
+  // ── Manual people management ────────────────────────────────────────────
+
+  function addPerson(role, person) {
+    setManualPeople((prev) => ({
+      ...prev,
+      [role]: [...(prev[role] ?? []), person],
+    }))
+  }
+
+  function removePerson(role, id) {
+    setManualPeople((prev) => ({
+      ...prev,
+      [role]: (prev[role] ?? []).filter((p) => p.id !== id),
+    }))
+  }
+
+  const handleAddObserver = useCallback((p) => addPerson('observers', p), [])
+  const handleRemoveObserver = useCallback((id) => removePerson('observers', id), [])
+  const handleAddApprover = useCallback((p) => addPerson('approvers', p), [])
+  const handleRemoveApprover = useCallback((id) => removePerson('approvers', id), [])
+  const handleAddCollaborator = useCallback((p) => addPerson('collaborators', p), [])
+  const handleRemoveCollaborator = useCallback(
+    (id) => removePerson('collaborators', id),
+    [],
+  )
+
+  // ── Header derived state ────────────────────────────────────────────────
+
+  const isFirstStep = stepId === 'select'
+  const backLabel = isFirstStep
+    ? 'Back to People'
+    : stepId === 'define'
+      ? 'Back to Select people'
+      : 'Back to Define change set'
 
   const currentStepIndex = BULK_CHANGE_STEPS.findIndex((s) => s.id === stepId)
 
@@ -104,13 +350,12 @@ export default function BulkChangePage({
     <div className="flex-1 min-h-0 flex flex-col bg-rippling-surface">
       {/* ── Header ── */}
       <header className="h-14 px-5 border-b border-rippling-line bg-white flex items-center gap-4 shrink-0">
-        {/* Back button — goes to list on step 1, back to select on step 2 */}
         <button
           type="button"
-          onClick={stepId === 'select' ? () => onNavigate({ name: 'list' }) : handleBackToSelect}
+          onClick={handleBack}
           className="h-8 w-8 rounded-md ui-interactive flex items-center justify-center text-rippling-muted hover:text-rippling-ink shrink-0"
-          aria-label={stepId === 'select' ? 'Back to People' : 'Back to Select people'}
-          title={stepId === 'select' ? 'Back to People' : 'Back to Select people'}
+          aria-label={backLabel}
+          title={backLabel}
         >
           <ArrowLeft size={15} strokeWidth={1.75} />
         </button>
@@ -186,7 +431,35 @@ export default function BulkChangePage({
             </button>
           )}
 
-          {stepId === 'changes' && (
+          {stepId === 'define' && (
+            <button
+              type="button"
+              onClick={handleContinue}
+              disabled={!canContinueFromDefine}
+              className={classNames(
+                'h-8 pl-3 pr-2.5 rounded-md text-[13px] font-medium flex items-center gap-1.5 transition-colors',
+                canContinueFromDefine
+                  ? 'bg-rippling-plum text-white hover:bg-rippling-plum-hover shadow-sm'
+                  : 'bg-rippling-surface-2 text-rippling-muted cursor-not-allowed',
+              )}
+              title={
+                canContinueFromDefine
+                  ? 'Continue to set values for each employee'
+                  : 'Pick at least one field to continue'
+              }
+            >
+              <span>Make changes</span>
+              {selectedFieldKeys.length > 0 && (
+                <span className="bg-white/20 text-white text-[11px] font-semibold px-1.5 rounded tabular-nums">
+                  {selectedFieldKeys.length}{' '}
+                  {selectedFieldKeys.length === 1 ? 'field' : 'fields'}
+                </span>
+              )}
+              <ArrowRight size={13} strokeWidth={2} />
+            </button>
+          )}
+
+          {stepId === 'edit' && (
             <button
               type="button"
               disabled
@@ -210,11 +483,51 @@ export default function BulkChangePage({
         />
       )}
 
-      {stepId === 'changes' && (
-        <DefineChangesStep
-          selectedEmployeeIds={finalizedEmployeeIds}
-          worklistName={worklistName}
+      {stepId === 'define' && (
+        <DefineChangeSetStep
           lead={WORKLIST_LEAD}
+          selectedFieldKeys={selectedFieldKeys}
+          bulkValues={bulkValues}
+          uniformByField={uniformByField}
+          manualPeople={manualPeople}
+          onAddFields={handleAddFields}
+          onApplyTemplate={handleApplyTemplate}
+          onRemoveField={handleRemoveField}
+          onRemoveFields={handleRemoveFields}
+          onChangeBulkValue={handleChangeBulkValue}
+          onToggleUniform={handleToggleUniform}
+          onAddObserver={handleAddObserver}
+          onRemoveObserver={handleRemoveObserver}
+          onAddApprover={handleAddApprover}
+          onRemoveApprover={handleRemoveApprover}
+          onAddCollaborator={handleAddCollaborator}
+          onRemoveCollaborator={handleRemoveCollaborator}
+        />
+      )}
+
+      {stepId === 'edit' && (
+        <MakeChangesStep
+          selectedEmployeeIds={finalizedEmployeeIds}
+          lead={WORKLIST_LEAD}
+          selectedFieldKeys={selectedFieldKeys}
+          bulkValues={bulkValues}
+          cellOverrides={cellOverrides}
+          uniformByField={uniformByField}
+          manualPeople={manualPeople}
+          onAddFields={handleAddFields}
+          onApplyTemplate={handleApplyTemplate}
+          onRemoveField={handleRemoveField}
+          onRemoveFields={handleRemoveFields}
+          onChangeBulkValue={handleChangeBulkValue}
+          onChangeCell={handleChangeCell}
+          onToggleUniform={handleToggleUniform}
+          onResetOverrides={handleResetOverrides}
+          onAddObserver={handleAddObserver}
+          onRemoveObserver={handleRemoveObserver}
+          onAddApprover={handleAddApprover}
+          onRemoveApprover={handleRemoveApprover}
+          onAddCollaborator={handleAddCollaborator}
+          onRemoveCollaborator={handleRemoveCollaborator}
         />
       )}
     </div>

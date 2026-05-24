@@ -149,8 +149,14 @@ function stepLabel(step) {
   switch (step) {
     case 'select':
       return 'Selecting people'
+    case 'define':
+      return 'Defining change set'
+    case 'edit':
+      return 'Making changes'
     case 'changes':
-      return 'Defining changes'
+      // Legacy worklists from before the Define / Make Changes split — show
+      // them as the closest equivalent so old drafts don't display "—".
+      return 'Making changes'
     case 'review':
       return 'Ready for review'
     default:

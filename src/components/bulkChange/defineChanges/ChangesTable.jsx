@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { RotateCcw, X } from 'lucide-react'
+import { RotateCcw, User, Users, X } from 'lucide-react'
 import { avatarClass, classNames, initials } from '../../../lib/utils'
 import FieldInput from '../../shared/FieldInput'
 import { FIELDS_BY_KEY } from './fieldSchema'
@@ -18,15 +18,18 @@ const BODY_CELL = 'px-3 py-2.5 align-top'
  *     editable input bound to the resolved new value
  *
  * Value resolution per (empId, fieldKey):
- *   override → bulk default → current employee value
+ *   Uniform columns: override → bulk default → current employee value
+ *   Unique columns:  override → current employee value (bulk default ignored)
  */
 export default function ChangesTable({
   employees,
   selectedFieldKeys,
   bulkValues,
   cellOverrides,
+  uniformByField,
   onChangeCell,
   onRemoveField,
+  onToggleUniform,
   onResetOverrides,
   totalEmployees,
   hiddenBySearchCount,
@@ -49,10 +52,19 @@ export default function ChangesTable({
 
   const fieldsWithBulk = useMemo(
     () =>
-      selectedFieldKeys.filter(
-        (k) => bulkValues?.[k] !== undefined && bulkValues?.[k] !== '',
-      ).length,
-    [selectedFieldKeys, bulkValues],
+      selectedFieldKeys.filter((k) => {
+        const mode = uniformByField?.[k] ?? 'uniform'
+        if (mode !== 'uniform') return false
+        return bulkValues?.[k] !== undefined && bulkValues?.[k] !== ''
+      }).length,
+    [selectedFieldKeys, bulkValues, uniformByField],
+  )
+
+  const uniqueCount = useMemo(
+    () =>
+      selectedFieldKeys.filter((k) => (uniformByField?.[k] ?? 'uniform') === 'unique')
+        .length,
+    [selectedFieldKeys, uniformByField],
   )
 
   return (
@@ -69,7 +81,15 @@ export default function ChangesTable({
           <>
             <span className="text-rippling-muted">·</span>
             <span className="text-rippling-plum tabular-nums">
-              {fieldsWithBulk} with default
+              {fieldsWithBulk} same for all
+            </span>
+          </>
+        )}
+        {uniqueCount > 0 && (
+          <>
+            <span className="text-rippling-muted">·</span>
+            <span className="text-rippling-ink-2 tabular-nums">
+              {uniqueCount} per person
             </span>
           </>
         )}
@@ -121,6 +141,8 @@ export default function ChangesTable({
               ) : (
                 visibleFields.map((field, idx) => {
                   const Icon = field.sectionIcon
+                  const mode = uniformByField?.[field.key] ?? 'uniform'
+                  const isUniform = mode === 'uniform'
                   return (
                     <th
                       key={field.key}
@@ -141,8 +163,31 @@ export default function ChangesTable({
                         <span className="truncate">{field.label}</span>
                         <button
                           type="button"
+                          onClick={() => onToggleUniform?.(field.key)}
+                          className={classNames(
+                            'ml-auto h-5 px-1.5 rounded-full text-[10px] font-medium uppercase tracking-wide flex items-center gap-1 ui-interactive',
+                            isUniform
+                              ? 'bg-rippling-chip text-rippling-plum'
+                              : 'bg-rippling-surface-2 text-rippling-ink-2',
+                          )}
+                          title={
+                            isUniform
+                              ? 'Same for all — click to switch to per person'
+                              : 'Per person — click to switch to same for all'
+                          }
+                          aria-label={`Toggle ${field.label} mode`}
+                        >
+                          {isUniform ? (
+                            <Users size={10} strokeWidth={1.9} />
+                          ) : (
+                            <User size={10} strokeWidth={1.9} />
+                          )}
+                          <span>{isUniform ? 'All' : 'Each'}</span>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => onRemoveField?.(field.key)}
-                          className="ml-auto h-5 w-5 rounded ui-interactive flex items-center justify-center text-rippling-muted hover:text-rippling-ink opacity-60 hover:opacity-100"
+                          className="h-5 w-5 rounded ui-interactive flex items-center justify-center text-rippling-muted hover:text-rippling-ink opacity-60 hover:opacity-100"
                           aria-label={`Remove ${field.label} column`}
                           title={`Remove ${field.label} column`}
                         >
@@ -176,6 +221,7 @@ export default function ChangesTable({
                 visibleFields={visibleFields}
                 bulkValues={bulkValues}
                 overrides={cellOverrides?.[employee.id]}
+                uniformByField={uniformByField}
                 onChangeCell={onChangeCell}
               />
             ))}
@@ -186,7 +232,14 @@ export default function ChangesTable({
   )
 }
 
-function EmployeeRow({ employee, visibleFields, bulkValues, overrides, onChangeCell }) {
+function EmployeeRow({
+  employee,
+  visibleFields,
+  bulkValues,
+  overrides,
+  uniformByField,
+  onChangeCell,
+}) {
   return (
     <tr className="border-b border-rippling-line-2 data-row">
       <td className={classNames(BODY_CELL, 'sticky left-0 z-10 bg-white')}>
@@ -211,10 +264,12 @@ function EmployeeRow({ employee, visibleFields, bulkValues, overrides, onChangeC
       ) : (
         visibleFields.map((field, idx) => {
           const current = getCurrentValue(employee, field.key)
-          const bulk = bulkValues?.[field.key]
+          const mode = uniformByField?.[field.key] ?? 'uniform'
+          const isUniform = mode === 'uniform'
+          const bulk = isUniform ? bulkValues?.[field.key] : undefined
           const override = overrides?.[field.key]
           const hasOverride = override !== undefined
-          const hasBulk = bulk !== undefined && bulk !== ''
+          const hasBulk = isUniform && bulk !== undefined && bulk !== ''
           const resolvedValue = hasOverride ? override : hasBulk ? bulk : ''
           const willChange = resolvedValue !== '' && resolvedValue !== current
 
@@ -230,9 +285,14 @@ function EmployeeRow({ employee, visibleFields, bulkValues, overrides, onChangeC
               <div className="space-y-1">
                 <div className="text-[10.5px] uppercase tracking-wide text-rippling-muted flex items-center gap-1">
                   <span>Current</span>
-                  {hasOverride && (
+                  {hasOverride && isUniform && (
                     <span className="text-rippling-plum normal-case tracking-normal text-[10px] font-medium">
                       · overridden
+                    </span>
+                  )}
+                  {!isUniform && (
+                    <span className="text-rippling-ink-2 normal-case tracking-normal text-[10px] font-medium">
+                      · per person
                     </span>
                   )}
                 </div>
