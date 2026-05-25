@@ -1,15 +1,14 @@
 import { classNames } from '../../../lib/utils'
+import { FIELDS_BY_KEY } from './fieldSchema'
+
+const MAX_VISIBLE_PILLS = 6
 
 /**
- * Small clickable card representing a playbook template. Two variants:
+ * Clickable card representing a playbook template.
  *
- *   • size="lg"  — used in the empty-state grid below the composer.
- *                  Larger surface with icon, label, description, and
- *                  field count.
- *   • size="sm"  — used inside the composer's "/" menu. Single row,
- *                  no description, optionally highlighted by keyboard nav.
- *
- * The component is presentational; the parent owns selection state.
+ *   • size="lg"   — grid card with icon, label, description, field count
+ *   • size="sm"   — compact single row for keyboard-nav menus
+ *   • size="list" — rich list row with description + field pills (Browse templates)
  */
 export default function TemplateCard({
   template,
@@ -46,6 +45,64 @@ export default function TemplateCard({
         <span className="text-[10.5px] tabular-nums text-rippling-muted shrink-0">
           {fieldCount} fields
         </span>
+      </button>
+    )
+  }
+
+  if (size === 'list') {
+    const fieldLabels = template.fieldKeys
+      .map((key) => FIELDS_BY_KEY.get(key)?.label)
+      .filter(Boolean)
+    const visibleLabels = fieldLabels.slice(0, MAX_VISIBLE_PILLS)
+    const hiddenCount = fieldLabels.length - visibleLabels.length
+
+    return (
+      <button
+        type="button"
+        onClick={() => onSelect?.(template)}
+        aria-selected={ariaSelected}
+        className={classNames(
+          'w-full px-3 py-3 text-left rounded-lg transition-colors border border-transparent',
+          highlighted
+            ? 'bg-rippling-surface-2 border-rippling-line'
+            : 'bg-transparent hover:bg-rippling-surface-2 hover:border-rippling-line',
+        )}
+      >
+        <div className="flex items-start gap-2.5">
+          <span className="h-8 w-8 rounded-lg bg-rippling-chip text-rippling-plum flex items-center justify-center shrink-0">
+            {Icon && <Icon size={14} strokeWidth={1.85} />}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[13px] font-semibold text-rippling-ink">
+                {template.label}
+              </span>
+              <span className="text-[10.5px] tabular-nums text-rippling-muted shrink-0">
+                {fieldCount} {fieldCount === 1 ? 'field' : 'fields'}
+              </span>
+            </div>
+            <p className="text-[12px] text-rippling-muted leading-snug mt-1 line-clamp-2">
+              {template.description}
+            </p>
+            {visibleLabels.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {visibleLabels.map((label) => (
+                  <span
+                    key={label}
+                    className="inline-flex h-5 px-1.5 rounded-full bg-white border border-rippling-line text-[10.5px] text-rippling-ink-2"
+                  >
+                    {label}
+                  </span>
+                ))}
+                {hiddenCount > 0 && (
+                  <span className="inline-flex h-5 px-1.5 rounded-full bg-rippling-surface text-[10.5px] text-rippling-muted">
+                    +{hiddenCount} more
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
       </button>
     )
   }

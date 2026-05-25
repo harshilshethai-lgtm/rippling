@@ -488,14 +488,11 @@ export default function BulkChangePage({
           lead={WORKLIST_LEAD}
           selectedFieldKeys={selectedFieldKeys}
           bulkValues={bulkValues}
-          uniformByField={uniformByField}
           manualPeople={manualPeople}
           onAddFields={handleAddFields}
           onApplyTemplate={handleApplyTemplate}
           onRemoveField={handleRemoveField}
           onRemoveFields={handleRemoveFields}
-          onChangeBulkValue={handleChangeBulkValue}
-          onToggleUniform={handleToggleUniform}
           onAddObserver={handleAddObserver}
           onRemoveObserver={handleRemoveObserver}
           onAddApprover={handleAddApprover}

@@ -53,7 +53,7 @@ function StepNode({ step, index, isChild, isLast, parentIsLast }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-[12.5px] text-rippling-ink leading-snug">{step.label}</span>
-            <span className="text-[9.5px] font-semibold uppercase tracking-wide text-rippling-plum/70 bg-rippling-chip px-1 py-0.5 rounded">
+            <span className="text-[10px] font-medium text-rippling-plum/70 bg-rippling-chip px-1.5 py-0.5 rounded-full">
               Auto
             </span>
           </div>

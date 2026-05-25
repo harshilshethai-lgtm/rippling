@@ -1,11 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
 import { EMPLOYEES } from '../../data/employees'
 import ChangeFieldsFilterBar from './defineChanges/ChangeFieldsFilterBar'
 import ChangesTable from './defineChanges/ChangesTable'
 import PropertiesSidebar from './defineChanges/PropertiesSidebar'
 import { useDerivedContext } from './defineChanges/useDerivedContext'
-import { getDerivationKeysForFields } from './defineChanges/fieldSchema'
 
 /**
  * Step 3 of the Bulk Change wizard — "Make changes".
@@ -13,13 +12,16 @@ import { getDerivationKeysForFields } from './defineChanges/fieldSchema'
  * Now that the user has decided *which* fields to edit (Define Change Set
  * step), this page puts them in front of the actual editable table so they
  * can set values per row. The chip strip stays available at the top in a
- * compact form so they can still add/remove fields or flip mode without
- * navigating back.
+ * compact form so they can still add/remove properties without navigating
+ * back, but it's plain chips only — the Uniform/Unique toggle and the
+ * bulk-default editor live in the table column header.
  *
  * Layout:
- *   • Top strip: employee search (filters table rows) + compact composer +
- *     chips with Uniform/Unique toggles and inline value editors.
- *   • Below: the editable ChangesTable.
+ *   • Top strip: employee search (filters table rows) + plain chip row +
+ *     "+ Add property" / "Ask AI" / "Browse templates" action bar.
+ *   • Below: the editable ChangesTable. Each column header carries the
+ *     All/Each toggle and a "Set value for all" popover when in Uniform
+ *     mode.
  *   • Right rail: PropertiesSidebar (observers/approvers/process steps)
  *     derived from the selected fields, same as the Define page.
  *
@@ -69,14 +71,15 @@ export default function MakeChangesStep({
     )
   }, [employees, search])
 
-  const derivationKeys = useMemo(
-    () => getDerivationKeysForFields(selectedFieldKeys),
-    [selectedFieldKeys],
-  )
   const { observers, approvers, collaborators, steps } = useDerivedContext(
-    derivationKeys,
+    selectedFieldKeys,
     manualPeople,
   )
+
+  const handleClearAll = useCallback(() => {
+    if (selectedFieldKeys.length === 0) return
+    onRemoveFields?.(selectedFieldKeys)
+  }, [selectedFieldKeys, onRemoveFields])
 
   return (
     <div className="flex-1 min-h-0 flex overflow-hidden">
@@ -100,19 +103,17 @@ export default function MakeChangesStep({
             />
           </div>
 
-          {/* Compact changeset strip — chips stay actionable here so the
-              user can still toggle mode / edit bulk default / add fields
-              without leaving this page. */}
+          {/* Compact changeset strip — plain chips here. The Uniform/Unique
+              decision and the per-property bulk default live in the table
+              column header below. */}
           <ChangeFieldsFilterBar
             selectedFieldKeys={selectedFieldKeys}
             bulkValues={bulkValues}
-            uniformByField={uniformByField}
             onAddFields={onAddFields}
             onApplyTemplate={onApplyTemplate}
             onRemoveField={onRemoveField}
             onRemoveFields={onRemoveFields}
-            onChangeBulkValue={onChangeBulkValue}
-            onToggleUniform={onToggleUniform}
+            onClearAll={handleClearAll}
             variant="compact"
           />
         </div>
@@ -125,6 +126,7 @@ export default function MakeChangesStep({
             cellOverrides={cellOverrides}
             uniformByField={uniformByField}
             onChangeCell={onChangeCell}
+            onChangeBulkValue={onChangeBulkValue}
             onRemoveField={onRemoveField}
             onToggleUniform={onToggleUniform}
             onResetOverrides={onResetOverrides}
