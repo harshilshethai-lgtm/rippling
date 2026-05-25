@@ -20,6 +20,8 @@ export default function DefineChangeSetStep({
   selectedFieldKeys,
   bulkValues,
   manualPeople,
+  effectiveDateTime,
+  onEffectiveDateTimeChange,
   onAddFields,
   onApplyTemplate,
   onRemoveField,
@@ -74,6 +76,8 @@ export default function DefineChangeSetStep({
         approvers={approvers}
         collaborators={collaborators}
         steps={steps}
+        effectiveDateTime={effectiveDateTime}
+        onEffectiveDateTimeChange={onEffectiveDateTimeChange}
         onAddObserver={onAddObserver}
         onRemoveObserver={onRemoveObserver}
         onAddApprover={onAddApprover}

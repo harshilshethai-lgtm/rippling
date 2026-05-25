@@ -33,6 +33,8 @@ export default function MakeChangesStep({
   cellOverrides,
   uniformByField,
   manualPeople,
+  effectiveDateTime,
+  onEffectiveDateTimeChange,
   onChangeBulkValue,
   onChangeCell,
   onToggleUniform,
@@ -188,6 +190,8 @@ export default function MakeChangesStep({
         approvers={approvers}
         collaborators={collaborators}
         steps={steps}
+        effectiveDateTime={effectiveDateTime}
+        onEffectiveDateTimeChange={onEffectiveDateTimeChange}
         onAddObserver={onAddObserver}
         onRemoveObserver={onRemoveObserver}
         onAddApprover={onAddApprover}

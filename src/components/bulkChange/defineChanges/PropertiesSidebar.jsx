@@ -1,21 +1,85 @@
-import { useState } from 'react'
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Info } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { ChevronDown, ChevronUp, Info, PanelRightClose, PanelRightOpen } from 'lucide-react'
 import PropertiesPanel from './PropertiesPanel'
 import ProcessFlow from './ProcessFlow'
+import EffectiveDatePicker, { getTzAbbrev } from './EffectiveDatePicker'
 import { classNames } from '../../../lib/utils'
+
+/** Formats the dynamic tooltip text for the effective date info icon */
+function formatEffectiveTooltip(dt) {
+  if (!dt) return ''
+  const { date, hour, minute, ampm, timezone } = dt
+  const [y, m, d] = date.split('-').map(Number)
+  const dateLabel = new Date(y, m - 1, d).toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
+  const minStr = String(minute).padStart(2, '0')
+  const tzAbbr = getTzAbbrev(timezone)
+  return `These changes will be effective on ${dateLabel} at ${hour}:${minStr}:00 ${ampm} ${tzAbbr} for each profile affected by this change. The local time will differ based on individual location.`
+}
+
+/**
+ * Info icon that renders its tooltip via a portal anchored to the
+ * viewport, so it's never clipped by overflow-hidden parents.
+ */
+function InfoTooltip({ content }) {
+  const [visible, setVisible] = useState(false)
+  const [coords, setCoords] = useState({ top: 0, left: 0 })
+  const btnRef = useRef(null)
+
+  function show() {
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setCoords({ top: rect.top + rect.height / 2, left: rect.left })
+    }
+    setVisible(true)
+  }
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onMouseEnter={show}
+        onMouseLeave={() => setVisible(false)}
+        onFocus={show}
+        onBlur={() => setVisible(false)}
+        onClick={(e) => e.stopPropagation()}
+        className="h-4 w-4 flex items-center justify-center rounded text-rippling-muted hover:text-rippling-ink-2 transition-colors"
+        aria-label="More information"
+      >
+        <Info size={11} strokeWidth={1.9} />
+      </button>
+
+      {visible &&
+        createPortal(
+          <div
+            style={{
+              position: 'fixed',
+              top: coords.top,
+              right: `calc(100vw - ${coords.left}px + 8px)`,
+              transform: 'translateY(-50%)',
+            }}
+            className="z-[9999] w-[240px] rounded-lg border border-rippling-line bg-white shadow-rippling-dropdown px-3 py-2.5 text-[11.5px] text-rippling-ink-2 leading-relaxed pointer-events-none"
+          >
+            {content}
+          </div>,
+          document.body,
+        )}
+    </>
+  )
+}
 
 /**
  * Collapsible right rail for the Define and Make changes steps.
  *
- * When open (w-[300px]) it shows two collapsible sections:
- *   • Stakeholders — Lead / Observers / Approvers / Collaborators
- *   • Process      — Hierarchical step flow
- *
- * When collapsed (w-9) it renders a vertical toggle strip.
- *
- * Top-level rail header is "Details" (renamed from "Properties" so it no
- * longer clashes with the "properties" = fields terminology on the main page).
- * The inner section is "Stakeholders" (renamed from "Details").
+ * Sections (top to bottom):
+ *   1. Effective Date      — always visible, date/time/timezone picker
+ *   2. Stakeholders        — collapsible: Lead / Observers / Approvers / Collaborators
+ *   3. Follow up steps     — collapsible: hierarchical step flow
  */
 export default function PropertiesSidebar({
   lead,
@@ -23,6 +87,8 @@ export default function PropertiesSidebar({
   approvers,
   collaborators,
   steps,
+  effectiveDateTime,
+  onEffectiveDateTimeChange,
   onAddObserver,
   onRemoveObserver,
   onAddApprover,
@@ -33,7 +99,6 @@ export default function PropertiesSidebar({
   const [collapsed, setCollapsed] = useState(false)
   const [stakeholdersOpen, setStakeholdersOpen] = useState(true)
   const [processOpen, setProcessOpen] = useState(true)
-  const [tooltipVisible, setTooltipVisible] = useState(false)
 
   if (collapsed) {
     return (
@@ -45,7 +110,7 @@ export default function PropertiesSidebar({
           aria-label="Expand details panel"
           title="Expand details panel"
         >
-          <ChevronLeft size={14} strokeWidth={1.75} />
+          <PanelRightOpen size={15} strokeWidth={1.75} />
         </button>
 
         <span
@@ -59,7 +124,7 @@ export default function PropertiesSidebar({
   }
 
   return (
-    <aside className="w-[300px] shrink-0 border-l border-rippling-line bg-white flex flex-col overflow-hidden">
+    <aside className="w-[300px] shrink-0 border-l border-rippling-line bg-white flex flex-col">
       {/* Rail header */}
       <div className="h-10 px-4 border-b border-rippling-line flex items-center justify-between shrink-0">
         <span className="text-[12.5px] font-semibold text-rippling-ink-2">Details</span>
@@ -70,11 +135,28 @@ export default function PropertiesSidebar({
           aria-label="Collapse details panel"
           title="Collapse"
         >
-          <ChevronRight size={13} strokeWidth={1.75} />
+          <PanelRightClose size={15} strokeWidth={1.75} />
         </button>
       </div>
 
       <div className="flex-1 overflow-y-auto">
+
+        {/* ── Effective Date section (always visible, at top) ── */}
+        {effectiveDateTime && (
+          <section className="px-4 pt-3 pb-3 border-b border-rippling-line">
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="text-[11.5px] font-semibold text-rippling-muted">
+                Effective Date
+              </span>
+              <InfoTooltip content={formatEffectiveTooltip(effectiveDateTime)} />
+            </div>
+            <EffectiveDatePicker
+              value={effectiveDateTime}
+              onChange={onEffectiveDateTimeChange}
+            />
+          </section>
+        )}
+
         {/* ── Stakeholders section ── */}
         <section>
           <button
@@ -86,29 +168,7 @@ export default function PropertiesSidebar({
               <span className="text-[11.5px] font-semibold text-rippling-muted">
                 Stakeholders
               </span>
-              {/* Info tooltip */}
-              <span className="relative">
-                <button
-                  type="button"
-                  onMouseEnter={() => setTooltipVisible(true)}
-                  onMouseLeave={() => setTooltipVisible(false)}
-                  onFocus={() => setTooltipVisible(true)}
-                  onBlur={() => setTooltipVisible(false)}
-                  onClick={(e) => e.stopPropagation()}
-                  className="h-4 w-4 flex items-center justify-center rounded text-rippling-muted hover:text-rippling-ink-2 transition-colors"
-                  aria-label="About stakeholders"
-                >
-                  <Info size={11} strokeWidth={1.9} />
-                </button>
-                {tooltipVisible && (
-                  <div className="absolute left-5 top-1/2 -translate-y-1/2 z-50 w-[240px] rounded-lg border border-rippling-line bg-white shadow-rippling-dropdown px-3 py-2.5 text-[11.5px] text-rippling-ink-2 leading-relaxed pointer-events-none">
-                    Observers and approvers are added automatically based on the
-                    properties you select. Hover a{' '}
-                    <span className="text-rippling-plum font-medium">via …</span> chip to
-                    see which property triggered their addition.
-                  </div>
-                )}
-              </span>
+              <InfoTooltip content="Observers and approvers are added automatically based on the properties you select." />
             </div>
             {stakeholdersOpen ? (
               <ChevronUp
@@ -143,14 +203,16 @@ export default function PropertiesSidebar({
 
         <div className="h-px bg-rippling-line mx-4" />
 
-        {/* ── Process section ── */}
+        {/* ── Follow up steps section ── */}
         <section>
           <button
             type="button"
             className="w-full h-8 px-4 flex items-center justify-between hover:bg-rippling-surface group transition-colors"
             onClick={() => setProcessOpen((v) => !v)}
           >
-            <span className="text-[11.5px] font-semibold text-rippling-muted">Process</span>
+            <span className="text-[11.5px] font-semibold text-rippling-muted">
+              Follow up steps
+            </span>
             {processOpen ? (
               <ChevronUp
                 size={12}

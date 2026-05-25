@@ -24,6 +24,21 @@ const EMPTY_MANUAL_PEOPLE = {
   collaborators: [],
 }
 
+function buildDefaultEffectiveDateTime() {
+  const now = new Date()
+  let hour = now.getHours()
+  const minute = now.getMinutes()
+  const ampm = hour >= 12 ? 'PM' : 'AM'
+  hour = hour % 12 || 12
+  return {
+    date: now.toISOString().slice(0, 10),
+    hour,
+    minute,
+    ampm,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  }
+}
+
 // Minimal lead object representing whoever creates the worklist
 const WORKLIST_LEAD = { id: 'lead-me', name: 'Harshil Sheth', role: 'People Admin' }
 
@@ -65,6 +80,11 @@ export default function BulkChangePage({
   const [cellOverrides, setCellOverrides] = useState({})
   const [uniformByField, setUniformByField] = useState({})
   const [manualPeople, setManualPeople] = useState(EMPTY_MANUAL_PEOPLE)
+  const [effectiveDateTime, setEffectiveDateTime] = useState(buildDefaultEffectiveDateTime)
+
+  const handleEffectiveDateTimeChange = useCallback((patch) => {
+    setEffectiveDateTime((prev) => ({ ...prev, ...patch }))
+  }, [])
 
   const nameInputRef = useRef(null)
   const worklistIdRef = useRef(null)
@@ -479,9 +499,9 @@ export default function BulkChangePage({
               type="button"
               disabled
               className="h-8 pl-3 pr-2.5 rounded-md text-[13px] font-medium flex items-center gap-1.5 bg-rippling-surface-2 text-rippling-muted cursor-not-allowed"
-              title="Review & apply — coming in next step"
+              title="Follow up steps — coming in next step"
             >
-              <span>Review changes</span>
+              <span>Follow up steps</span>
               <ArrowRight size={13} strokeWidth={2} />
             </button>
           )}
@@ -504,6 +524,8 @@ export default function BulkChangePage({
           selectedFieldKeys={selectedFieldKeys}
           bulkValues={bulkValues}
           manualPeople={manualPeople}
+          effectiveDateTime={effectiveDateTime}
+          onEffectiveDateTimeChange={handleEffectiveDateTimeChange}
           onAddFields={handleAddFields}
           onApplyTemplate={handleApplyTemplate}
           onRemoveField={handleRemoveField}
@@ -526,6 +548,8 @@ export default function BulkChangePage({
           cellOverrides={cellOverrides}
           uniformByField={uniformByField}
           manualPeople={manualPeople}
+          effectiveDateTime={effectiveDateTime}
+          onEffectiveDateTimeChange={handleEffectiveDateTimeChange}
           onChangeBulkValue={handleChangeBulkValue}
           onChangeCell={handleChangeCell}
           onToggleUniform={handleToggleUniform}
