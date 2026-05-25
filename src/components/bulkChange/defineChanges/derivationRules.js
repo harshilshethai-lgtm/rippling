@@ -1,3 +1,5 @@
+import { FIELDS_BY_KEY } from './fieldSchema'
+
 /**
  * Admin-configured rules: which observers, approvers, and process steps
  * are automatically injected when a given derivation key is included in
@@ -206,27 +208,54 @@ export const DERIVATION_RULES = {
       },
     ],
   },
+
+  visaStatus: {
+    observers: [
+      { id: 'auto-obs-legal', name: 'Aditi Brown', role: 'General Counsel' },
+    ],
+    approvers: [],
+    steps: [
+      {
+        id: 'visa-docs',
+        label: 'Request updated visa documentation',
+        kind: 'document',
+        children: [],
+      },
+    ],
+  },
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 /**
  * Returns the union of all auto-derived observers and approvers for the given
- * set of field keys. Deduped by person id so the same person isn't listed twice
- * even if they're in multiple rules.
+ * *field keys* (not rule keys). Each returned person carries a `sources` array
+ * of the field keys that triggered their inclusion — used to render
+ * "via {Field Label}" chips in the sidebar.
+ *
+ * Deduped by person id; sources are accumulated across multiple fields.
  */
 export function getDerivedPeople(fieldKeys) {
   const observerMap = new Map()
   const approverMap = new Map()
 
-  for (const key of fieldKeys) {
-    const rule = DERIVATION_RULES[key]
+  for (const fieldKey of fieldKeys) {
+    const fieldMeta = FIELDS_BY_KEY.get(fieldKey)
+    if (!fieldMeta?.derivationRuleKey) continue
+    const rule = DERIVATION_RULES[fieldMeta.derivationRuleKey]
     if (!rule) continue
+
     for (const person of rule.observers ?? []) {
-      if (!observerMap.has(person.id)) observerMap.set(person.id, person)
+      if (!observerMap.has(person.id)) {
+        observerMap.set(person.id, { ...person, sources: [] })
+      }
+      observerMap.get(person.id).sources.push(fieldKey)
     }
     for (const person of rule.approvers ?? []) {
-      if (!approverMap.has(person.id)) approverMap.set(person.id, person)
+      if (!approverMap.has(person.id)) {
+        approverMap.set(person.id, { ...person, sources: [] })
+      }
+      approverMap.get(person.id).sources.push(fieldKey)
     }
   }
 
@@ -237,14 +266,16 @@ export function getDerivedPeople(fieldKeys) {
 }
 
 /**
- * Returns the union of all auto-derived process steps for the given field keys.
- * Steps are deduped by id; children are merged recursively.
+ * Returns the union of all auto-derived process steps for the given *field
+ * keys*. Steps are deduped by id; children are merged recursively.
  */
 export function getDerivedSteps(fieldKeys) {
   const stepMap = new Map()
 
-  for (const key of fieldKeys) {
-    const rule = DERIVATION_RULES[key]
+  for (const fieldKey of fieldKeys) {
+    const fieldMeta = FIELDS_BY_KEY.get(fieldKey)
+    if (!fieldMeta?.derivationRuleKey) continue
+    const rule = DERIVATION_RULES[fieldMeta.derivationRuleKey]
     if (!rule) continue
     for (const step of rule.steps ?? []) {
       if (!stepMap.has(step.id)) {

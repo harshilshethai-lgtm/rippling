@@ -1,5 +1,5 @@
-import { useMemo } from 'react'
-import { RotateCcw, User, Users, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Pencil, RotateCcw, User, Users, X } from 'lucide-react'
 import { avatarClass, classNames, initials } from '../../../lib/utils'
 import FieldInput from '../../shared/FieldInput'
 import { FIELDS_BY_KEY } from './fieldSchema'
@@ -28,6 +28,7 @@ export default function ChangesTable({
   cellOverrides,
   uniformByField,
   onChangeCell,
+  onChangeBulkValue,
   onRemoveField,
   onToggleUniform,
   onResetOverrides,
@@ -139,67 +140,18 @@ export default function ChangesTable({
                   No fields selected — add fields above to start editing
                 </th>
               ) : (
-                visibleFields.map((field, idx) => {
-                  const Icon = field.sectionIcon
-                  const mode = uniformByField?.[field.key] ?? 'uniform'
-                  const isUniform = mode === 'uniform'
-                  return (
-                    <th
-                      key={field.key}
-                      className={classNames(
-                        HEADER_CELL,
-                        'min-w-[200px]',
-                        idx === visibleFields.length - 1 && 'border-r-0',
-                      )}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        {Icon && (
-                          <Icon
-                            size={11}
-                            strokeWidth={1.75}
-                            className="text-rippling-muted shrink-0"
-                          />
-                        )}
-                        <span className="truncate">{field.label}</span>
-                        <button
-                          type="button"
-                          onClick={() => onToggleUniform?.(field.key)}
-                          className={classNames(
-                            'ml-auto h-5 px-1.5 rounded-full text-[10px] font-medium uppercase tracking-wide flex items-center gap-1 ui-interactive',
-                            isUniform
-                              ? 'bg-rippling-chip text-rippling-plum'
-                              : 'bg-rippling-surface-2 text-rippling-ink-2',
-                          )}
-                          title={
-                            isUniform
-                              ? 'Same for all — click to switch to per person'
-                              : 'Per person — click to switch to same for all'
-                          }
-                          aria-label={`Toggle ${field.label} mode`}
-                        >
-                          {isUniform ? (
-                            <Users size={10} strokeWidth={1.9} />
-                          ) : (
-                            <User size={10} strokeWidth={1.9} />
-                          )}
-                          <span>{isUniform ? 'All' : 'Each'}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onRemoveField?.(field.key)}
-                          className="h-5 w-5 rounded ui-interactive flex items-center justify-center text-rippling-muted hover:text-rippling-ink opacity-60 hover:opacity-100"
-                          aria-label={`Remove ${field.label} column`}
-                          title={`Remove ${field.label} column`}
-                        >
-                          <X size={11} strokeWidth={2} />
-                        </button>
-                      </div>
-                      <div className="mt-1 text-[10px] font-normal text-rippling-muted normal-case tracking-normal truncate">
-                        {field.sectionLabel}
-                      </div>
-                    </th>
-                  )
-                })
+                visibleFields.map((field, idx) => (
+                  <FieldHeaderCell
+                    key={field.key}
+                    field={field}
+                    isLast={idx === visibleFields.length - 1}
+                    mode={uniformByField?.[field.key] ?? 'uniform'}
+                    bulkValue={bulkValues?.[field.key]}
+                    onToggleUniform={onToggleUniform}
+                    onChangeBulkValue={onChangeBulkValue}
+                    onRemoveField={onRemoveField}
+                  />
+                ))
               )}
             </tr>
           </thead>
@@ -316,5 +268,208 @@ function EmployeeRow({
         })
       )}
     </tr>
+  )
+}
+
+/**
+ * Column header for one selected field.
+ *
+ * Two rows of UI inside the header cell:
+ *   • Top: icon, label, the All/Each mode toggle pill, and the remove ×.
+ *   • Bottom: in Uniform mode, a clickable "Set value for all" / "→ value"
+ *     control that opens a popover with a `FieldInput` to set the bulk
+ *     default. In Unique mode, just the section label.
+ *
+ * This is where the bulk-default editor lives now that chips on the
+ * Define + Make changes pages no longer carry it. Preserves the Uniform
+ * resolution contract: override → bulk default → current employee value.
+ */
+function FieldHeaderCell({
+  field,
+  isLast,
+  mode,
+  bulkValue,
+  onToggleUniform,
+  onChangeBulkValue,
+  onRemoveField,
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(bulkValue ?? '')
+  const popoverRef = useRef(null)
+  const Icon = field.sectionIcon
+  const isUniform = mode === 'uniform'
+  const hasBulk = isUniform && bulkValue !== undefined && bulkValue !== ''
+
+  useEffect(() => {
+    if (editing) setDraft(bulkValue ?? '')
+  }, [editing, bulkValue])
+
+  useEffect(() => {
+    if (!editing) return
+    function handleOutside(event) {
+      if (popoverRef.current && !popoverRef.current.contains(event.target)) {
+        setEditing(false)
+      }
+    }
+    function handleKey(event) {
+      if (event.key === 'Escape') setEditing(false)
+    }
+    document.addEventListener('mousedown', handleOutside)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('mousedown', handleOutside)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [editing])
+
+  function applyValue() {
+    onChangeBulkValue?.(field.key, draft)
+    setEditing(false)
+  }
+
+  function clearValue() {
+    onChangeBulkValue?.(field.key, '')
+    setEditing(false)
+  }
+
+  return (
+    <th
+      className={classNames(
+        HEADER_CELL,
+        'min-w-[200px] relative',
+        isLast && 'border-r-0',
+      )}
+    >
+      <div className="flex items-center gap-1.5">
+        {Icon && (
+          <Icon size={11} strokeWidth={1.75} className="text-rippling-muted shrink-0" />
+        )}
+        <span className="truncate">{field.label}</span>
+        <button
+          type="button"
+          onClick={() => onToggleUniform?.(field.key)}
+          className={classNames(
+            'ml-auto h-5 px-1.5 rounded-full text-[10px] font-medium uppercase tracking-wide flex items-center gap-1 ui-interactive',
+            isUniform
+              ? 'bg-rippling-chip text-rippling-plum'
+              : 'bg-rippling-surface-2 text-rippling-ink-2',
+          )}
+          title={
+            isUniform
+              ? 'Same for all — click to switch to per person'
+              : 'Per person — click to switch to same for all'
+          }
+          aria-label={`Toggle ${field.label} mode`}
+        >
+          {isUniform ? (
+            <Users size={10} strokeWidth={1.9} />
+          ) : (
+            <User size={10} strokeWidth={1.9} />
+          )}
+          <span>{isUniform ? 'All' : 'Each'}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onRemoveField?.(field.key)}
+          className="h-5 w-5 rounded ui-interactive flex items-center justify-center text-rippling-muted hover:text-rippling-ink opacity-60 hover:opacity-100"
+          aria-label={`Remove ${field.label} column`}
+          title={`Remove ${field.label} column`}
+        >
+          <X size={11} strokeWidth={2} />
+        </button>
+      </div>
+
+      <div className="mt-1 flex items-center gap-1.5 min-h-[16px]">
+        {isUniform ? (
+          <button
+            type="button"
+            onClick={() => setEditing((v) => !v)}
+            className={classNames(
+              'inline-flex items-center gap-1 max-w-full text-left normal-case tracking-normal font-normal ui-interactive rounded px-1 -mx-1 transition-colors',
+              hasBulk
+                ? 'text-rippling-plum hover:bg-rippling-chip'
+                : 'text-rippling-muted hover:text-rippling-ink hover:bg-rippling-surface',
+            )}
+            title={
+              hasBulk
+                ? `Edit value used for everyone (currently: ${bulkValue})`
+                : 'Set a value used for everyone in this column'
+            }
+          >
+            <Pencil
+              size={9}
+              strokeWidth={1.9}
+              className={hasBulk ? 'text-rippling-plum/70' : 'text-rippling-muted'}
+            />
+            {hasBulk ? (
+              <>
+                <span className="text-[10px] uppercase tracking-wide text-rippling-plum/70 font-medium">
+                  All →
+                </span>
+                <span className="text-[11px] font-medium truncate">
+                  {String(bulkValue)}
+                </span>
+              </>
+            ) : (
+              <span className="text-[10.5px] italic">Set value for all</span>
+            )}
+          </button>
+        ) : (
+          <span className="text-[10px] font-normal text-rippling-muted normal-case tracking-normal truncate">
+            {field.sectionLabel}
+          </span>
+        )}
+      </div>
+
+      {editing && isUniform && (
+        <div
+          ref={popoverRef}
+          className="absolute z-30 left-2 top-full mt-1 w-[260px] rounded-xl border border-rippling-line bg-white shadow-rippling-dropdown anim-slide-in-bottom p-3"
+        >
+          <div className="flex items-center gap-1.5 mb-2">
+            {Icon && (
+              <Icon size={12} strokeWidth={1.75} className="text-rippling-muted" />
+            )}
+            <span className="text-[12.5px] font-medium text-rippling-ink truncate">
+              Set {field.label.toLowerCase()} for all
+            </span>
+          </div>
+          <p className="text-[11.5px] text-rippling-muted mb-2 leading-relaxed normal-case tracking-normal font-normal">
+            Applied as the default for every employee in the worklist. You can still
+            override individual rows below.
+          </p>
+          <FieldInput
+            field={{ ...field, value: draft }}
+            onChange={setDraft}
+            placeholder={`New ${field.label.toLowerCase()}`}
+          />
+          <div className="flex items-center justify-between gap-1.5 mt-3">
+            <button
+              type="button"
+              onClick={clearValue}
+              className="h-7 px-2 rounded-md text-[12px] text-rippling-muted hover:text-rippling-ink ui-interactive normal-case tracking-normal font-normal"
+            >
+              Clear
+            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="h-7 px-2.5 rounded-md text-[12px] text-rippling-muted ui-interactive normal-case tracking-normal font-normal"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={applyValue}
+                className="h-7 px-2.5 rounded-md text-[12px] font-medium bg-rippling-plum text-white hover:bg-rippling-plum-hover transition-colors normal-case tracking-normal"
+              >
+                Apply to all
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </th>
   )
 }
