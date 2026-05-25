@@ -298,16 +298,31 @@ export default function BulkChangePage({
     setCellOverrides({})
   }, [])
 
-  // Toggle a column between 'uniform' and 'unique' modes. We intentionally
-  // keep `bulkValues[fieldKey]` untouched on the toggle so flipping back to
-  // Uniform restores the previous "apply to all" value.
+  // Toggle a column between 'uniform' and 'unique' modes.
+  //
+  // uniform → unique: seed every employee's cellOverride with the current
+  //   bulk value (overwrites any prior per-row value for deterministic
+  //   behaviour). bulkValues[fieldKey] is left intact so that flipping
+  //   back to uniform always restores the previous "apply to all" value.
+  //
+  // unique → uniform: pure mode flip only — bulkValues already persists.
   const handleToggleUniform = useCallback((fieldKey) => {
     setUniformByField((prev) => {
       const current = prev[fieldKey] ?? 'uniform'
       const nextMode = current === 'uniform' ? 'unique' : 'uniform'
+      if (nextMode === 'unique') {
+        const seed = bulkValues[fieldKey] ?? ''
+        setCellOverrides((prevOverrides) => {
+          const out = { ...prevOverrides }
+          for (const id of finalizedEmployeeIds) {
+            out[id] = { ...(out[id] ?? {}), [fieldKey]: seed }
+          }
+          return out
+        })
+      }
       return { ...prev, [fieldKey]: nextMode }
     })
-  }, [])
+  }, [bulkValues, finalizedEmployeeIds])
 
   // ── Manual people management ────────────────────────────────────────────
 
@@ -511,14 +526,9 @@ export default function BulkChangePage({
           cellOverrides={cellOverrides}
           uniformByField={uniformByField}
           manualPeople={manualPeople}
-          onAddFields={handleAddFields}
-          onApplyTemplate={handleApplyTemplate}
-          onRemoveField={handleRemoveField}
-          onRemoveFields={handleRemoveFields}
           onChangeBulkValue={handleChangeBulkValue}
           onChangeCell={handleChangeCell}
           onToggleUniform={handleToggleUniform}
-          onResetOverrides={handleResetOverrides}
           onAddObserver={handleAddObserver}
           onRemoveObserver={handleRemoveObserver}
           onAddApprover={handleAddApprover}
