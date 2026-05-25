@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import ChangeFieldsFilterBar from './defineChanges/ChangeFieldsFilterBar'
 import PropertiesSidebar from './defineChanges/PropertiesSidebar'
 import { useDerivedContext } from './defineChanges/useDerivedContext'
+import CsvSplitButton from './csv/wizard/CsvSplitButton'
 
 /**
  * Step 2 of the Bulk Change wizard — "Define change set".
@@ -17,6 +18,7 @@ import { useDerivedContext } from './defineChanges/useDerivedContext'
  */
 export default function DefineChangeSetStep({
   lead,
+  selectedEmployees,
   selectedFieldKeys,
   bulkValues,
   manualPeople,
@@ -32,6 +34,7 @@ export default function DefineChangeSetStep({
   onRemoveApprover,
   onAddCollaborator,
   onRemoveCollaborator,
+  onStageCsvDraft,
 }) {
   const { observers, approvers, collaborators, steps } = useDerivedContext(
     selectedFieldKeys,
@@ -67,6 +70,18 @@ export default function DefineChangeSetStep({
             onClearAll={handleClearAll}
             variant="expanded"
           />
+          <div className="mt-4 flex justify-center">
+            <CsvSplitButton
+              mode="define"
+              variant="body"
+              selectedEmployees={selectedEmployees}
+              selectedFieldKeys={selectedFieldKeys}
+              onConfirm={({ fieldKeys, parsed, inferredMapping }) => {
+                if (fieldKeys.length > 0) onAddFields?.(fieldKeys)
+                onStageCsvDraft?.({ parsed, inferredMapping, fieldKeys })
+              }}
+            />
+          </div>
         </div>
       </div>
 

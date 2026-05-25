@@ -5,6 +5,7 @@ import { FILTER_SCHEMA, formatChipValueLabel } from './bulkChangeUtils'
 import FilterPicker from './FilterPicker'
 import MentionInput from './MentionInput'
 import AskAiPopover from './AskAiPopover'
+import CsvSplitButton from './csv/wizard/CsvSplitButton'
 
 /**
  * Linear-style filter bar: a search/mention input on top, then a chip row
@@ -26,6 +27,9 @@ export default function LinearFilterBar({
   attributeCounts,
   scopeForAttribute,
   aiContext,
+  onCsvImport,
+  csvSelectedIds,
+  onExportCsv,
 }) {
   const [pickerState, setPickerState] = useState({ open: false, editing: null })
   const [askAi, setAskAi] = useState({ open: false, prompt: '' })
@@ -194,6 +198,15 @@ export default function LinearFilterBar({
             <span>Add filter</span>
             <span className="ml-1 text-[10px] text-rippling-muted">/</span>
           </button>
+
+          <CsvSplitButton
+            mode="select"
+            variant="chip"
+            employees={employees}
+            selectedIds={csvSelectedIds}
+            onExportCsv={onExportCsv}
+            onConfirm={onCsvImport}
+          />
 
           <button
             ref={askAiButtonRef}
