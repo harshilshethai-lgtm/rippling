@@ -1,33 +1,29 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
 import { EMPLOYEES } from '../../data/employees'
-import ChangeFieldsFilterBar from './defineChanges/ChangeFieldsFilterBar'
 import ChangesTable from './defineChanges/ChangesTable'
 import PropertiesSidebar from './defineChanges/PropertiesSidebar'
+import { getCurrentValue } from './defineChanges/currentValues'
 import { useDerivedContext } from './defineChanges/useDerivedContext'
 
 /**
  * Step 3 of the Bulk Change wizard — "Make changes".
  *
- * Now that the user has decided *which* fields to edit (Define Change Set
- * step), this page puts them in front of the actual editable table so they
- * can set values per row. The chip strip stays available at the top in a
- * compact form so they can still add/remove properties without navigating
- * back, but it's plain chips only — the Uniform/Unique toggle and the
- * bulk-default editor live in the table column header.
+ * This page is a CSV-style edit grid. The chip strip / Add property / Paste
+ * CSV controls intentionally don't live here anymore — those belong upstream
+ * on Step 2 (Define change set). If the user wants to add a property they go
+ * back; CSV pasting will arrive in a later iteration.
  *
  * Layout:
- *   • Top strip: employee search (filters table rows) + plain chip row +
- *     "+ Add property" / "Ask AI" / "Browse templates" action bar.
- *   • Below: the editable ChangesTable. Each column header carries the
- *     All/Each toggle and a "Set value for all" popover when in Uniform
- *     mode.
- *   • Right rail: PropertiesSidebar (observers/approvers/process steps)
- *     derived from the selected fields, same as the Define page.
+ *   • Top strip: employee search (left) and totals (right).
+ *   • Body: ChangesTable — a spreadsheet of rows × selected fields.
+ *   • Footer: keyboard shortcut chips on the left, total cell progress on
+ *     the right.
+ *   • Right rail: PropertiesSidebar (observers / approvers / process steps).
  *
- * Value resolution per cell mirrors the original step's contract:
- *   Uniform columns: override → bulk default → current employee value
- *   Unique columns:  override → current employee value
+ * Per-column resolution contract (see ChangesTable):
+ *   Unique OFF (default): everyone gets the bulk value (edited from row 0).
+ *   Unique ON:            override → bulk → empty.
  */
 export default function MakeChangesStep({
   selectedEmployeeIds = [],
@@ -37,14 +33,9 @@ export default function MakeChangesStep({
   cellOverrides,
   uniformByField,
   manualPeople,
-  onAddFields,
-  onApplyTemplate,
-  onRemoveField,
-  onRemoveFields,
   onChangeBulkValue,
   onChangeCell,
   onToggleUniform,
-  onResetOverrides,
   onAddObserver,
   onRemoveObserver,
   onAddApprover,
@@ -52,20 +43,19 @@ export default function MakeChangesStep({
   onAddCollaborator,
   onRemoveCollaborator,
 }) {
-  // Local employee search — purely a view concern, no need to lift.
   const [search, setSearch] = useState('')
 
   const employees = useMemo(() => {
     if (selectedEmployeeIds.length === 0) return []
     const idSet = new Set(selectedEmployeeIds)
-    return EMPLOYEES.filter((e) => idSet.has(e.id))
+    return EMPLOYEES.filter((emp) => idSet.has(emp.id))
   }, [selectedEmployeeIds])
 
   const filteredEmployees = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return employees
-    return employees.filter((e) =>
-      `${e.fullName} ${e.title} ${e.email} ${e.department}`
+    return employees.filter((emp) =>
+      `${emp.fullName} ${emp.title} ${emp.email} ${emp.department}`
         .toLowerCase()
         .includes(q),
     )
@@ -76,49 +66,84 @@ export default function MakeChangesStep({
     manualPeople,
   )
 
-  const handleClearAll = useCallback(() => {
-    if (selectedFieldKeys.length === 0) return
-    onRemoveFields?.(selectedFieldKeys)
-  }, [selectedFieldKeys, onRemoveFields])
+  // ── Header / footer metrics ────────────────────────────────────────────
+  // "Changes" counts cells that resolve to a value different from the
+  // employee's current value. "Set" counts the same denominator (rows ×
+  // fields) but treats _any_ non-empty resolved cell as set (matches the
+  // reference design's "48 of 100 cells set" indicator).
+  const { changesCount, setCount, totalCells } = useMemo(
+    () =>
+      computeCellMetrics({
+        employees,
+        selectedFieldKeys,
+        bulkValues,
+        cellOverrides,
+        uniformByField,
+      }),
+    [employees, selectedFieldKeys, bulkValues, cellOverrides, uniformByField],
+  )
+
+  const setPct = totalCells > 0 ? Math.round((setCount / totalCells) * 100) : 0
+  const hiddenBySearchCount = employees.length - filteredEmployees.length
 
   return (
     <div className="flex-1 min-h-0 flex overflow-hidden">
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        <div className="px-6 pt-4 pb-3 border-b border-rippling-line bg-white space-y-3">
-          {/* Employee search */}
-          <div className="relative">
-            <Search
-              size={14}
-              strokeWidth={1.9}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-rippling-muted"
-            />
-            <input
-              type="text"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={`Search ${employees.length} ${
-                employees.length === 1 ? 'employee' : 'employees'
-              } in worklist...`}
-              className="w-full h-9 pl-9 pr-3 text-[13px] rounded-md bg-rippling-surface border border-transparent placeholder:text-rippling-muted focus:outline-none focus:bg-white focus:border-rippling-line transition-colors"
-            />
-          </div>
+        {/* ── Top toolbar ──────────────────────────────────────────────── */}
+        <div className="px-6 pt-4 pb-3 border-b border-rippling-line bg-white">
+          <div className="flex items-center gap-3">
+            <div className="relative w-[300px] max-w-full">
+              <Search
+                size={14}
+                strokeWidth={1.9}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-rippling-muted"
+              />
+              <input
+                type="text"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder={`Search ${employees.length} ${
+                  employees.length === 1 ? 'employee' : 'employees'
+                }...`}
+                className="w-full h-9 pl-9 pr-3 text-[13px] rounded-md bg-rippling-surface border border-transparent placeholder:text-rippling-muted focus:outline-none focus:bg-white focus:border-rippling-line transition-colors"
+              />
+            </div>
 
-          {/* Compact changeset strip — plain chips here. The Uniform/Unique
-              decision and the per-property bulk default live in the table
-              column header below. */}
-          <ChangeFieldsFilterBar
-            selectedFieldKeys={selectedFieldKeys}
-            bulkValues={bulkValues}
-            onAddFields={onAddFields}
-            onApplyTemplate={onApplyTemplate}
-            onRemoveField={onRemoveField}
-            onRemoveFields={onRemoveFields}
-            onClearAll={handleClearAll}
-            variant="compact"
-          />
+            <div className="ml-auto flex items-center gap-2 text-[12.5px] text-rippling-ink-2 tabular-nums">
+              <span>
+                <span className="font-medium">{changesCount}</span>{' '}
+                <span className="text-rippling-muted">
+                  {changesCount === 1 ? 'change' : 'changes'}
+                </span>
+              </span>
+              <span className="text-rippling-line">·</span>
+              <span>
+                <span className="font-medium">{employees.length}</span>{' '}
+                <span className="text-rippling-muted">
+                  {employees.length === 1 ? 'employee' : 'employees'}
+                </span>
+              </span>
+              <span className="text-rippling-line">·</span>
+              <span>
+                <span className="font-medium">{selectedFieldKeys.length}</span>{' '}
+                <span className="text-rippling-muted">
+                  {selectedFieldKeys.length === 1 ? 'field' : 'fields'}
+                </span>
+              </span>
+              {hiddenBySearchCount > 0 && (
+                <>
+                  <span className="text-rippling-line">·</span>
+                  <span className="text-rippling-muted">
+                    {hiddenBySearchCount} hidden by search
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
         </div>
 
-        <div className="flex-1 overflow-auto p-6 bg-rippling-surface">
+        {/* ── Spreadsheet — full bleed, table owns scroll ──────────────── */}
+        <div className="flex-1 min-h-0 overflow-hidden bg-white border-t border-rippling-line">
           <ChangesTable
             employees={filteredEmployees}
             selectedFieldKeys={selectedFieldKeys}
@@ -127,12 +152,33 @@ export default function MakeChangesStep({
             uniformByField={uniformByField}
             onChangeCell={onChangeCell}
             onChangeBulkValue={onChangeBulkValue}
-            onRemoveField={onRemoveField}
             onToggleUniform={onToggleUniform}
-            onResetOverrides={onResetOverrides}
-            totalEmployees={employees.length}
-            hiddenBySearchCount={employees.length - filteredEmployees.length}
           />
+        </div>
+
+        {/* ── Footer: keyboard hints + total progress ─────────────────── */}
+        <div className="h-10 px-6 border-t border-rippling-line bg-white flex items-center gap-4 shrink-0">
+          <div className="flex items-center gap-3 text-[11.5px] text-rippling-muted">
+            <ShortcutHint keys={['Tab']} label="next cell" />
+            <ShortcutHint keys={['↵']} label="next row" />
+            <ShortcutHint keys={['Esc']} label="cancel cell" />
+          </div>
+
+          <div className="ml-auto flex items-center gap-2 min-w-[180px]">
+            <div className="relative flex-1 h-1.5 rounded-full bg-rippling-line-2 overflow-hidden">
+              <div
+                className="absolute inset-y-0 left-0 bg-rippling-plum rounded-full transition-[width]"
+                style={{ width: `${setPct}%` }}
+              />
+            </div>
+            <span className="text-[11.5px] text-rippling-ink-2 tabular-nums font-medium shrink-0">
+              {setCount}
+              <span className="text-rippling-muted font-normal">
+                {' '}
+                of {totalCells} cells set
+              </span>
+            </span>
+          </div>
         </div>
       </div>
 
@@ -151,4 +197,64 @@ export default function MakeChangesStep({
       />
     </div>
   )
+}
+
+/* ── Keyboard shortcut chip ──────────────────────────────────────────────── */
+
+function ShortcutHint({ keys, label }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="inline-flex items-center gap-0.5">
+        {keys.map((k, i) => (
+          <kbd
+            key={i}
+            className="inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded border border-rippling-line bg-white text-[10.5px] font-medium text-rippling-ink-2"
+          >
+            {k}
+          </kbd>
+        ))}
+      </span>
+      <span>{label}</span>
+    </span>
+  )
+}
+
+/* ── Cell metrics helper ─────────────────────────────────────────────────── */
+
+function computeCellMetrics({
+  employees,
+  selectedFieldKeys,
+  bulkValues,
+  cellOverrides,
+  uniformByField,
+}) {
+  const totalCells = employees.length * selectedFieldKeys.length
+  let changesCount = 0
+  let setCount = 0
+
+  for (const fieldKey of selectedFieldKeys) {
+    const mode = uniformByField?.[fieldKey] ?? 'uniform'
+    const bulk = bulkValues?.[fieldKey]
+    const hasBulk = bulk !== undefined && bulk !== ''
+
+    for (const emp of employees) {
+      const override = cellOverrides?.[emp.id]?.[fieldKey]
+      const hasOverride = override !== undefined && override !== ''
+      const resolved =
+        mode === 'unique'
+          ? hasOverride
+            ? override
+            : hasBulk
+              ? bulk
+              : ''
+          : hasBulk
+            ? bulk
+            : ''
+      if (resolved !== '') setCount += 1
+      const current = getCurrentValue(emp, fieldKey)
+      if (resolved !== '' && resolved !== current) changesCount += 1
+    }
+  }
+
+  return { totalCells, changesCount, setCount }
 }
