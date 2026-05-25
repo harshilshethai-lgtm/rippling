@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, Pencil } from 'lucide-react'
+import { EMPLOYEES } from '../data/employees'
 import UserSelectionStep from './bulkChange/UserSelectionStep'
 import DefineChangeSetStep from './bulkChange/DefineChangeSetStep'
 import MakeChangesStep from './bulkChange/MakeChangesStep'
 import StepIndicator, { BULK_CHANGE_STEPS } from './bulkChange/StepIndicator'
-import CsvImportButton from './bulkChange/csvImport/CsvImportButton'
 import { classNames } from '../lib/utils'
 import { upsertWorklist } from '../data/worklists'
 
@@ -81,6 +81,7 @@ export default function BulkChangePage({
   const [uniformByField, setUniformByField] = useState({})
   const [manualPeople, setManualPeople] = useState(EMPTY_MANUAL_PEOPLE)
   const [effectiveDateTime, setEffectiveDateTime] = useState(buildDefaultEffectiveDateTime)
+  const [stagedCsvDraft, setStagedCsvDraft] = useState(null)
 
   const handleEffectiveDateTimeChange = useCallback((patch) => {
     setEffectiveDateTime((prev) => ({ ...prev, ...patch }))
@@ -119,14 +120,6 @@ export default function BulkChangePage({
           : selectionStats.selected,
     })
   }, [worklistName, stepId, selectionStats.selected, finalizedEmployeeIds])
-
-  const csvImportHandlerRef = useRef(null)
-  const registerCsvImport = useCallback((handler) => {
-    csvImportHandlerRef.current = handler
-  }, [])
-  const handleHeaderCsvImport = useCallback((payload) => {
-    csvImportHandlerRef.current?.(payload)
-  }, [])
 
   useEffect(() => {
     if (!nameEditing) return
@@ -314,6 +307,29 @@ export default function BulkChangePage({
     })
   }, [])
 
+  const handleApplyCsvStatePatch = useCallback((patch) => {
+    if (!patch) return
+    if (patch.bulkValues) {
+      setBulkValues((prev) => ({ ...prev, ...patch.bulkValues }))
+    }
+    if (patch.uniformByField) {
+      setUniformByField((prev) => ({ ...prev, ...patch.uniformByField }))
+    }
+    if (patch.cellOverrides) {
+      setCellOverrides((prev) => {
+        const next = { ...prev }
+        for (const [employeeId, fieldMap] of Object.entries(patch.cellOverrides)) {
+          next[employeeId] = { ...(next[employeeId] ?? {}), ...(fieldMap ?? {}) }
+        }
+        return next
+      })
+    }
+  }, [])
+
+  const handleStageCsvDraft = useCallback((draft) => {
+    setStagedCsvDraft(draft)
+  }, [])
+
   const handleResetOverrides = useCallback(() => {
     setCellOverrides({})
   }, [])
@@ -380,6 +396,7 @@ export default function BulkChangePage({
       : 'Back to Define change set'
 
   const currentStepIndex = BULK_CHANGE_STEPS.findIndex((s) => s.id === stepId)
+  const selectedEmployees = EMPLOYEES.filter((employee) => finalizedEmployeeIds.includes(employee.id))
 
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-rippling-surface">
@@ -438,10 +455,6 @@ export default function BulkChangePage({
 
         {/* Right actions */}
         <div className="flex items-center gap-3 shrink-0">
-          {stepId === 'select' && (
-            <CsvImportButton variant="header" onImported={handleHeaderCsvImport} />
-          )}
-
           {stepId === 'select' && (
             <button
               type="button"
@@ -514,13 +527,13 @@ export default function BulkChangePage({
           initialFilters={initialFilters}
           initialEmployeeIds={initialEmployeeIds}
           onSelectionChange={handleSelectionChange}
-          registerCsvImport={registerCsvImport}
         />
       )}
 
       {stepId === 'define' && (
         <DefineChangeSetStep
           lead={WORKLIST_LEAD}
+          selectedEmployees={selectedEmployees}
           selectedFieldKeys={selectedFieldKeys}
           bulkValues={bulkValues}
           manualPeople={manualPeople}
@@ -536,6 +549,7 @@ export default function BulkChangePage({
           onRemoveApprover={handleRemoveApprover}
           onAddCollaborator={handleAddCollaborator}
           onRemoveCollaborator={handleRemoveCollaborator}
+          onStageCsvDraft={handleStageCsvDraft}
         />
       )}
 
@@ -550,9 +564,13 @@ export default function BulkChangePage({
           manualPeople={manualPeople}
           effectiveDateTime={effectiveDateTime}
           onEffectiveDateTimeChange={handleEffectiveDateTimeChange}
+          onAddFields={handleAddFields}
           onChangeBulkValue={handleChangeBulkValue}
           onChangeCell={handleChangeCell}
           onToggleUniform={handleToggleUniform}
+          onApplyCsvStatePatch={handleApplyCsvStatePatch}
+          stagedCsvDraft={stagedCsvDraft}
+          onClearStagedCsvDraft={() => setStagedCsvDraft(null)}
           onAddObserver={handleAddObserver}
           onRemoveObserver={handleRemoveObserver}
           onAddApprover={handleAddApprover}

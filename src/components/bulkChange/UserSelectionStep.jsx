@@ -14,6 +14,8 @@ import {
   makeChipId,
   scopeOptionsForAttribute,
 } from './bulkChangeUtils'
+import { buildPeopleSelectionCsvRows, downloadCsv } from './csv/csvDraft'
+import CsvSplitButton from './csv/wizard/CsvSplitButton'
 
 const BANNER_DISMISS_MS = 5000
 
@@ -40,7 +42,6 @@ export default function UserSelectionStep({
   initialFilters,
   initialEmployeeIds = [],
   onSelectionChange,
-  registerCsvImport,
 }) {
   const [chips, setChips] = useState(() => chipsFromInitialFilters(initialFilters))
   const [mentionedIds, setMentionedIds] = useState(() => {
@@ -304,13 +305,6 @@ export default function UserSelectionStep({
     }
   }, [csvBanner])
 
-  // Register the import handler with the parent so the page-header CSV button
-  // can dispatch through here without lifting the worklist state up.
-  useEffect(() => {
-    registerCsvImport?.(handleCsvImport)
-    return () => registerCsvImport?.(null)
-  }, [registerCsvImport, handleCsvImport])
-
   function removeMention(employeeId) {
     setMentionedIds((prev) => {
       if (!prev.has(employeeId)) return prev
@@ -363,6 +357,13 @@ export default function UserSelectionStep({
     setCsvBanner(null)
   }
 
+  function exportSelectedCsv() {
+    if (selectedIds.size === 0) return
+    const selectedEntries = worklist.filter(({ employee }) => selectedIds.has(employee.id))
+    const rows = buildPeopleSelectionCsvRows(selectedEntries)
+    downloadCsv('rippling_selected_people.csv', rows)
+  }
+
   const hasAnything = chips.length > 0 || mentionedIds.size > 0 || csvImportIds.size > 0
 
   return (
@@ -383,6 +384,9 @@ export default function UserSelectionStep({
           attributeCounts={attributeCounts}
           scopeForAttribute={scopeForAttribute}
           aiContext={aiContext}
+          onCsvImport={handleCsvImport}
+          csvSelectedIds={selectedIds}
+          onExportCsv={exportSelectedCsv}
         />
       </div>
 
@@ -391,7 +395,7 @@ export default function UserSelectionStep({
           <CsvImportBanner banner={csvBanner} onDismiss={dismissBanner} />
         )}
         {!hasAnything ? (
-          <EmptyState onCsvImport={handleCsvImport} />
+          <EmptyState />
         ) : (
           <ResultsTable
             entries={filteredWorklist}
@@ -406,6 +410,7 @@ export default function UserSelectionStep({
             onSelectAll={selectAll}
             onUnselectAll={unselectAll}
             onClearAll={clearAll}
+            onExportCsv={exportSelectedCsv}
             onRemoveMention={removeMention}
             onRemoveManualSignals={removeManualSignals}
           />

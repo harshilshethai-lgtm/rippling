@@ -1,18 +1,19 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
-import { EMPLOYEES } from '../../data/employees'
+import { EMPLOYEES, DEPARTMENTS, LOCATIONS, MANAGERS } from '../../data/employees'
 import ChangesTable from './defineChanges/ChangesTable'
 import PropertiesSidebar from './defineChanges/PropertiesSidebar'
+import MakeChangesAskAi from './defineChanges/MakeChangesAskAi'
 import { getCurrentValue } from './defineChanges/currentValues'
 import { useDerivedContext } from './defineChanges/useDerivedContext'
+import { applyFilters } from './bulkChangeUtils'
+import CsvSplitButton from './csv/wizard/CsvSplitButton'
 
 /**
  * Step 3 of the Bulk Change wizard — "Make changes".
  *
- * This page is a CSV-style edit grid. The chip strip / Add property / Paste
- * CSV controls intentionally don't live here anymore — those belong upstream
- * on Step 2 (Define change set). If the user wants to add a property they go
- * back; CSV pasting will arrive in a later iteration.
+ * The toolbar provides a single CSV split button (download / upload / paste)
+ * for round-trip CSV editing of the change grid.
  *
  * Layout:
  *   • Top strip: employee search (left) and totals (right).
@@ -35,9 +36,13 @@ export default function MakeChangesStep({
   manualPeople,
   effectiveDateTime,
   onEffectiveDateTimeChange,
+  onAddFields,
   onChangeBulkValue,
   onChangeCell,
   onToggleUniform,
+  onApplyCsvStatePatch,
+  stagedCsvDraft,
+  onClearStagedCsvDraft,
   onAddObserver,
   onRemoveObserver,
   onAddApprover,
@@ -46,6 +51,7 @@ export default function MakeChangesStep({
   onRemoveCollaborator,
 }) {
   const [search, setSearch] = useState('')
+  const askAiAnchorRef = useRef(null)
 
   const employees = useMemo(() => {
     if (selectedEmployeeIds.length === 0) return []
@@ -66,6 +72,83 @@ export default function MakeChangesStep({
   const { observers, approvers, collaborators, steps } = useDerivedContext(
     selectedFieldKeys,
     manualPeople,
+  )
+
+  // ── Ask-AI context ─────────────────────────────────────────────────────
+  // Departments/locations/managers/titles come from the *full* dataset so
+  // free-text mentions ("@Harshil Sheth") and aliases ("NYC") resolve even
+  // when the worklist itself is a narrow slice. `employees` (the scoped
+  // ones) is what the parser uses to disambiguate @-mentions for scope.
+  const aiContext = useMemo(() => {
+    const titles = [...new Set(EMPLOYEES.map((e) => e.title).filter(Boolean))].sort()
+    return {
+      employees: EMPLOYEES,
+      departments: DEPARTMENTS,
+      locations: LOCATIONS,
+      managers: MANAGERS,
+      titles,
+    }
+  }, [])
+
+  /**
+   * Translate a parsed AI suggestion into the existing change-grid
+   * primitives. The trick is column-mode selection:
+   *   • Uniform: ensure column mode is 'uniform' (so any prior per-row
+   *              overrides are ignored), then write a single bulk value.
+   *   • Unique:  ensure column mode is 'unique', then write per-row
+   *              overrides only for the in-scope subset.
+   *
+   * Mode flips must precede writes by a tick — when uniform→unique flips
+   * happen, `handleToggleUniform` schedules a setCellOverrides(seedFn)
+   * inside its updater. If we queue our writes synchronously, React
+   * processes them BEFORE the toggle's nested seed (the seed is queued
+   * later), and the seed clobbers our values. setTimeout(0) defers the
+   * writes to the next event-loop tick, after React has flushed both.
+   */
+  const handleApplyAiChanges = useCallback(
+    ({ scopeChips, changes, applyMode }) => {
+      if (!changes || changes.length === 0) return
+      const inScope =
+        scopeChips && scopeChips.length > 0
+          ? applyFilters(employees, scopeChips)
+          : employees
+      const inScopeIds = inScope.map((e) => e.id)
+
+      for (const change of changes) {
+        const { fieldKey, value } = change
+        if (!selectedFieldKeys.includes(fieldKey)) {
+          onAddFields?.([fieldKey])
+        }
+        const currentMode = uniformByField?.[fieldKey] ?? 'uniform'
+
+        if (applyMode === 'uniform') {
+          // If the column is currently unique, flip it back so the bulk
+          // value reaches rows that already have per-row overrides.
+          if (currentMode !== 'uniform') onToggleUniform?.(fieldKey)
+          onChangeBulkValue?.(fieldKey, value)
+          continue
+        }
+
+        const needsFlip = currentMode !== 'unique'
+        if (needsFlip) onToggleUniform?.(fieldKey)
+        const writeOverrides = () => {
+          for (const empId of inScopeIds) {
+            onChangeCell?.(empId, fieldKey, value)
+          }
+        }
+        if (needsFlip) setTimeout(writeOverrides, 0)
+        else writeOverrides()
+      }
+    },
+    [
+      employees,
+      selectedFieldKeys,
+      uniformByField,
+      onAddFields,
+      onChangeBulkValue,
+      onChangeCell,
+      onToggleUniform,
+    ],
   )
 
   // ── Header / footer metrics ────────────────────────────────────────────
@@ -93,7 +176,7 @@ export default function MakeChangesStep({
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
         {/* ── Top toolbar ──────────────────────────────────────────────── */}
         <div className="px-6 pt-4 pb-3 border-b border-rippling-line bg-white">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <div className="relative w-[300px] max-w-full">
               <Search
                 size={14}
@@ -141,6 +224,26 @@ export default function MakeChangesStep({
                 </>
               )}
             </div>
+          </div>
+          <div ref={askAiAnchorRef} className="mt-3 flex items-center gap-2 flex-wrap">
+            <CsvSplitButton
+              mode="make"
+              variant="toolbar"
+              employees={employees}
+              selectedFieldKeys={selectedFieldKeys}
+              bulkValues={bulkValues}
+              cellOverrides={cellOverrides}
+              uniformByField={uniformByField}
+              stagedCsvDraft={stagedCsvDraft}
+              onClearStagedCsvDraft={onClearStagedCsvDraft}
+              onConfirm={({ nextStatePatch }) => onApplyCsvStatePatch?.(nextStatePatch)}
+            />
+            <MakeChangesAskAi
+              parserContext={aiContext}
+              selectedEmployees={employees}
+              onApply={handleApplyAiChanges}
+              anchorMode="left"
+            />
           </div>
         </div>
 

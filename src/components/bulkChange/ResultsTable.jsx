@@ -62,6 +62,7 @@ export default function ResultsTable({
   onSelectAll,
   onUnselectAll,
   onClearAll,
+  onExportCsv,
   onRemoveMention,
   onRemoveManualSignals,
 }) {

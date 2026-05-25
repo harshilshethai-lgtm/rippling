@@ -86,33 +86,33 @@ const LOCATION_ALIASES = {
 }
 
 const TITLE_KEYWORDS = [
-  { keyword: /\bvp(s)?\b/, contains: 'VP' },
-  { keyword: /\bdirectors?\b/, contains: 'Director' },
-  { keyword: /\bmanagers?\b/, contains: 'Manager' },
-  { keyword: /\bleads?\b/, contains: 'Lead' },
-  { keyword: /\binterns?\b/, contains: 'Intern' },
-  { keyword: /\bseniors?\b/, contains: 'Senior' },
-  { keyword: /\bstaff\b/, contains: 'Staff' },
-  { keyword: /\bprincipals?\b/, contains: 'Principal' },
-  { keyword: /\banalysts?\b/, contains: 'Analyst' },
-  { keyword: /\baccountants?\b/, contains: 'Accountant' },
+  { keyword: /\bvp(s)?\b/i, contains: 'VP' },
+  { keyword: /\bdirectors?\b/i, contains: 'Director' },
+  { keyword: /\bmanagers?\b/i, contains: 'Manager' },
+  { keyword: /\bleads?\b/i, contains: 'Lead' },
+  { keyword: /\binterns?\b/i, contains: 'Intern' },
+  { keyword: /\bseniors?\b/i, contains: 'Senior' },
+  { keyword: /\bstaff\b/i, contains: 'Staff' },
+  { keyword: /\bprincipals?\b/i, contains: 'Principal' },
+  { keyword: /\banalysts?\b/i, contains: 'Analyst' },
+  { keyword: /\baccountants?\b/i, contains: 'Accountant' },
   { keyword: /\baccount executives?\b|\bAEs?\b/i, contains: 'Account Executive' },
-  { keyword: /\bsdrs?\b|\bsales development\b/, contains: 'Sales Development' },
-  { keyword: /\bcounsel\b/, contains: 'Counsel' },
-  { keyword: /\brecruiters?\b/, contains: 'Recruiter' },
-  { keyword: /\bchiefs?\b|\bcxo\b|\bc-suite\b/, contains: 'Chief' },
+  { keyword: /\bsdrs?\b|\bsales development\b/i, contains: 'Sales Development' },
+  { keyword: /\bcounsel\b/i, contains: 'Counsel' },
+  { keyword: /\brecruiters?\b/i, contains: 'Recruiter' },
+  { keyword: /\bchiefs?\b|\bcxo\b|\bc-suite\b/i, contains: 'Chief' },
 ]
 
 const EMPLOYMENT_TYPE_PATTERNS = [
-  { regex: /\bcontractors?\b|\bcontracted\b/, value: 'Contractor' },
-  { regex: /\bpart[- ]?time(rs)?\b/, value: 'Part-time' },
-  { regex: /\bfull[- ]?time(rs)?\b|\bfte\b/, value: 'Full-time' },
+  { regex: /\bcontractors?\b|\bcontracted\b/i, value: 'Contractor' },
+  { regex: /\bpart[- ]?time(rs)?\b/i, value: 'Part-time' },
+  { regex: /\bfull[- ]?time(rs)?\b|\bfte\b/i, value: 'Full-time' },
 ]
 
 const STATUS_PATTERNS = [
-  { regex: /\bon leave\b|\bparental\b|\bmaternity\b|\bpaternity\b|\bsabbatical\b/, value: 'On Leave' },
-  { regex: /\bonboarding\b|\bpre[- ]?boarding\b|\bnew joiners?\b|\bnew starters?\b/, value: 'Onboarding' },
-  { regex: /\bactive\b/, value: 'Active' },
+  { regex: /\bon leave\b|\bparental\b|\bmaternity\b|\bpaternity\b|\bsabbatical\b/i, value: 'On Leave' },
+  { regex: /\bonboarding\b|\bpre[- ]?boarding\b|\bnew joiners?\b|\bnew starters?\b/i, value: 'Onboarding' },
+  { regex: /\bactive\b/i, value: 'Active' },
 ]
 
 const UNSUPPORTED_KEYWORDS = [
