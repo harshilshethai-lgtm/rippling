@@ -312,15 +312,28 @@ function ColumnProgress({ filled, total }) {
 function CellEditor({ field, currentValue, cellValue, editable, willChange, onChange, onEnter }) {
   return (
     <div className="flex items-center gap-1.5 min-w-0">
-      {/* Current value — no strike-through, stays readable for verification */}
+      {/* Current value — strikethrough when a new value is set */}
       <div
-        className="text-[12px] text-rippling-muted truncate w-[80px] shrink-0"
+        className={classNames(
+          'text-[12px] truncate w-[80px] shrink-0 transition-colors',
+          willChange
+            ? 'text-rippling-ink-2/50 line-through decoration-rippling-ink-2/40'
+            : 'text-rippling-muted',
+        )}
         title={currentValue || '—'}
       >
         {currentValue || <span className="italic opacity-60">—</span>}
       </div>
 
-      <ArrowRight size={10} strokeWidth={1.75} className="text-rippling-line shrink-0" aria-hidden />
+      <ArrowRight
+        size={10}
+        strokeWidth={1.75}
+        className={classNames(
+          'shrink-0 transition-colors',
+          willChange ? 'text-rippling-plum/40' : 'text-rippling-line',
+        )}
+        aria-hidden
+      />
 
       {editable ? (
         <SmartInput

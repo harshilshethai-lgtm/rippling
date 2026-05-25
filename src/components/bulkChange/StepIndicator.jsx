@@ -5,6 +5,7 @@ export const BULK_CHANGE_STEPS = [
   { id: 'select', label: 'Select people' },
   { id: 'define', label: 'Define change set' },
   { id: 'edit', label: 'Make changes' },
+  { id: 'followups', label: 'Follow ups' },
   { id: 'review', label: 'Review & apply' },
 ]
 
