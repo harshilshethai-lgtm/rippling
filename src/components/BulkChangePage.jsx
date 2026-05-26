@@ -95,6 +95,12 @@ export default function BulkChangePage({
   const [tasksByDepartment, setTasksByDepartment] = useState({})
   const [ownerByDepartment, setOwnerByDepartment] = useState({})
 
+  // Preview event approver state — keyed by event id so it survives step
+  // navigation. Also used by the right-rail approver list (one-way sync via
+  // onAddApprover inside FollowUpsStep).
+  // Shape: { [eventId]: { id, name, role } }
+  const [approverByEventId, setApproverByEventId] = useState({})
+
   const handleEffectiveDateTimeChange = useCallback((patch) => {
     setEffectiveDateTime((prev) => ({ ...prev, ...patch }))
   }, [])
@@ -645,6 +651,8 @@ export default function BulkChangePage({
           setTasksByDepartment={setTasksByDepartment}
           ownerByDepartment={ownerByDepartment}
           setOwnerByDepartment={setOwnerByDepartment}
+          approverByEventId={approverByEventId}
+          setApproverByEventId={setApproverByEventId}
         />
       )}
 

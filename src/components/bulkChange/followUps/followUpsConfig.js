@@ -1,8 +1,9 @@
 import { FIELDS_BY_KEY } from '../defineChanges/fieldSchema'
 import { DEPARTMENTS_BY_ID } from './departments/DEPARTMENTS'
 import { getDepartmentsForFieldKeys } from './departments/fieldDepartmentMap'
+import { getPreviewEventSources, getRequiredIntegrationKeys } from './preview/previewEventsCatalog'
 
-/** Fixed items that are always shown in System Checks */
+/** Fixed items that are always shown in System Checks (kept for reference; replaced by Preview) */
 export const SYSTEM_CHECK_ITEMS = [
   // ── Hard blockers ──────────────────────────────────────────────────────
   {
@@ -341,27 +342,31 @@ function buildIntegrationItems(selectedFieldKeys) {
  * Build the full ordered substep plan for the given field selection.
  *
  * Returns an array of substep descriptors:
- *   { id, label, description, items[], kind: 'checks'|'department'|'comms'|'integrations',
+ *   { id, label, description, items[], kind: 'preview'|'department'|'comms'|'integrations',
  *     departmentId?, triggeringFieldKeys? }
  *
  * Order:
- *   System checks → [active departments in canonical order]
- *                 → Communications → Integrations
+ *   Preview → [active departments in canonical order]
+ *           → Communications → Integrations
  *
  * Active departments are determined by FIELD_DEPARTMENT_MAP — only those
  * triggered by at least one selected field appear. If no field triggers any
- * department, the sub-tracker collapses to just checks/comms/integrations.
+ * department, the sub-tracker collapses to just preview/comms/integrations.
+ *
+ * Integration substep is force-augmented with any integration keys referenced
+ * by Preview event sources, so every "Go to Integrations" deep-link works.
  */
 export function buildFollowUpsPlan(selectedFieldKeys) {
   const plan = []
 
-  // 1. System Checks — always first
+  // 1. Preview — always first (replaces System Checks)
+  const previewEventSources = getPreviewEventSources()
   plan.push({
-    id: 'systemChecks',
-    label: 'System checks',
-    description: 'Validates data integrity and system readiness before writing any changes.',
-    kind: 'checks',
-    items: SYSTEM_CHECK_ITEMS,
+    id: 'systemChecks',          // keep id stable so completedIds persists across re-renders
+    label: 'Preview',
+    description: 'A risk-shaped read-out of every event your change will trigger across people, systems, and compliance.',
+    kind: 'preview',
+    items: previewEventSources,  // EventSource[] — evaluated lazily by usePreviewRunner
   })
 
   // 2. Department panels — one substep per triggered department, in canonical order
@@ -390,14 +395,26 @@ export function buildFollowUpsPlan(selectedFieldKeys) {
     items: commItems,
   })
 
-  // 4. Integrations — always last, always present
-  const integrationItems = buildIntegrationItems(selectedFieldKeys)
+  // 4. Integrations — always last, always present.
+  // Force-include any integration keys that Preview events reference so that
+  // every "Go to Integrations" deep-link has a real destination row.
+  const allPreviewIds = new Set(previewEventSources.map((s) => s.id))
+  const requiredIntKeys = getRequiredIntegrationKeys(allPreviewIds)
+  const baseIntegrationItems = buildIntegrationItems(selectedFieldKeys)
+  const baseKeySet = new Set(baseIntegrationItems.map((i) => {
+    // extract key from id pattern 'int.{key}'
+    return i.id.replace(/^int\./, '')
+  }))
+  const extraItems = requiredIntKeys
+    .filter((k) => !baseKeySet.has(k))
+    .map((k) => INTEGRATION_DEFS[k])
+    .filter(Boolean)
   plan.push({
     id: 'integrations',
     label: 'Integrations',
     description: 'Syncs changes to connected third-party systems.',
     kind: 'integrations',
-    items: integrationItems,
+    items: [...baseIntegrationItems, ...extraItems],
   })
 
   return plan

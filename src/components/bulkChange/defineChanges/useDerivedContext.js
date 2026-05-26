@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
-import { getDerivedPeople, getDerivedSteps } from './derivationRules'
+import { getDerivedPeople } from './derivationRules'
+import { buildFollowUpsPlan } from '../followUps/followUpsConfig'
 
 /**
  * Merges auto-derived and manually-added people into a single context object
@@ -28,8 +29,9 @@ export function useDerivedContext(selectedFieldKeys, manualPeople) {
   )
 
   const steps = useMemo(
-    () => getDerivedSteps(selectedFieldKeys),
-    [selectedFieldKeys],
+    () => buildFollowUpsPlan(selectedFieldKeys),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedFieldKeys.join(',')],
   )
 
   const observers = useMemo(() => {
