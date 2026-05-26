@@ -4,6 +4,7 @@ import ActiveFilterChips from './ActiveFilterChips'
 import EmployeeTable from './EmployeeTable'
 import FilterPanel from './FilterPanel'
 import SelectionBar from './SelectionBar'
+import SlidesPage from './SlidesPage'
 import { EMPLOYEES, matchesPeopleTab } from '../data/employees'
 
 const EMPTY_FILTERS = {
@@ -75,20 +76,26 @@ export default function PeopleListPage({ onNavigate }) {
           onStartBulkChange={handleStartBulkChange}
         />
 
-        {activeFilterCount > 0 && <ActiveFilterChips filters={filters} setFilters={setFilters} />}
+        {peopleTab === 'slides' ? (
+          <SlidesPage />
+        ) : (
+          <>
+            {activeFilterCount > 0 && <ActiveFilterChips filters={filters} setFilters={setFilters} />}
 
-        <EmployeeTable
-          employees={filteredEmployees}
-          selected={selected}
-          setSelected={setSelected}
-          onRowClick={(emp) => onNavigate({ name: 'profile', employeeId: emp.id })}
-        />
+            <EmployeeTable
+              employees={filteredEmployees}
+              selected={selected}
+              setSelected={setSelected}
+              onRowClick={(emp) => onNavigate({ name: 'profile', employeeId: emp.id })}
+            />
 
-        <SelectionBar
-          selectedCount={selected.size}
-          onClear={() => setSelected(new Set())}
-          onStartBulkChange={handleStartBulkChange}
-        />
+            <SelectionBar
+              selectedCount={selected.size}
+              onClear={() => setSelected(new Set())}
+              onStartBulkChange={handleStartBulkChange}
+            />
+          </>
+        )}
       </div>
 
       <FilterPanel
