@@ -95,6 +95,7 @@ export default function PropertiesSidebar({
   onRemoveApprover,
   onAddCollaborator,
   onRemoveCollaborator,
+  hideProcessSection = false,
 }) {
   const [collapsed, setCollapsed] = useState(false)
   const [stakeholdersOpen, setStakeholdersOpen] = useState(true)
@@ -201,35 +202,39 @@ export default function PropertiesSidebar({
           )}
         </section>
 
-        <div className="h-px bg-rippling-line mx-4" />
+        {!hideProcessSection && (
+          <>
+            <div className="h-px bg-rippling-line mx-4" />
 
-        {/* ── Follow up steps section ── */}
-        <section>
-          <button
-            type="button"
-            className="w-full h-8 px-4 flex items-center justify-between hover:bg-rippling-surface group transition-colors"
-            onClick={() => setProcessOpen((v) => !v)}
-          >
-            <span className="text-[11.5px] font-semibold text-rippling-muted">
-              Follow up steps
-            </span>
-            {processOpen ? (
-              <ChevronUp
-                size={12}
-                strokeWidth={2}
-                className="text-rippling-muted group-hover:text-rippling-ink"
-              />
-            ) : (
-              <ChevronDown
-                size={12}
-                strokeWidth={2}
-                className="text-rippling-muted group-hover:text-rippling-ink"
-              />
-            )}
-          </button>
+            {/* ── Follow up steps section ── */}
+            <section>
+              <button
+                type="button"
+                className="w-full h-8 px-4 flex items-center justify-between hover:bg-rippling-surface group transition-colors"
+                onClick={() => setProcessOpen((v) => !v)}
+              >
+                <span className="text-[11.5px] font-semibold text-rippling-muted">
+                  Follow up steps
+                </span>
+                {processOpen ? (
+                  <ChevronUp
+                    size={12}
+                    strokeWidth={2}
+                    className="text-rippling-muted group-hover:text-rippling-ink"
+                  />
+                ) : (
+                  <ChevronDown
+                    size={12}
+                    strokeWidth={2}
+                    className="text-rippling-muted group-hover:text-rippling-ink"
+                  />
+                )}
+              </button>
 
-          {processOpen && <ProcessFlow steps={steps} />}
-        </section>
+              {processOpen && <ProcessFlow steps={steps} />}
+            </section>
+          </>
+        )}
       </div>
     </aside>
   )

@@ -4,7 +4,10 @@ import { EMPLOYEES } from '../data/employees'
 import UserSelectionStep from './bulkChange/UserSelectionStep'
 import DefineChangeSetStep from './bulkChange/DefineChangeSetStep'
 import MakeChangesStep from './bulkChange/MakeChangesStep'
+import FollowUpsStep from './bulkChange/followUps/FollowUpsStep'
 import StepIndicator, { BULK_CHANGE_STEPS } from './bulkChange/StepIndicator'
+import { getDepartmentsOwnedByPerson } from './bulkChange/followUps/departments/useDepartmentTasks'
+import { DEPARTMENTS_BY_ID } from './bulkChange/followUps/departments/DEPARTMENTS'
 import { classNames } from '../lib/utils'
 import { upsertWorklist } from '../data/worklists'
 
@@ -83,6 +86,15 @@ export default function BulkChangePage({
   const [effectiveDateTime, setEffectiveDateTime] = useState(buildDefaultEffectiveDateTime)
   const [stagedCsvDraft, setStagedCsvDraft] = useState(null)
 
+  // Department follow-ups state — lifted to the wizard so it survives the
+  // Back/Forward navigation between Follow ups and earlier steps.
+  // Shape:
+  //   tasksByDepartment: { [deptId]: Task[] }
+  //   ownerByDepartment: { [deptId]: { id, name, role } | null }
+  // See followUps/departments/useDepartmentTasks.js for the Task shape.
+  const [tasksByDepartment, setTasksByDepartment] = useState({})
+  const [ownerByDepartment, setOwnerByDepartment] = useState({})
+
   const handleEffectiveDateTimeChange = useCallback((patch) => {
     setEffectiveDateTime((prev) => ({ ...prev, ...patch }))
   }, [])
@@ -149,10 +161,26 @@ export default function BulkChangePage({
     }
     if (stepId === 'define' && canContinueFromDefine) {
       setStepId('edit')
+      return
+    }
+    if (stepId === 'edit') {
+      setStepId('followups')
+      return
+    }
+    if (stepId === 'followups') {
+      setStepId('review')
     }
   }
 
   function handleBack() {
+    if (stepId === 'review') {
+      setStepId('followups')
+      return
+    }
+    if (stepId === 'followups') {
+      setStepId('edit')
+      return
+    }
     if (stepId === 'edit') {
       setStepId('define')
       return
@@ -380,10 +408,45 @@ export default function BulkChangePage({
   const handleRemoveObserver = useCallback((id) => removePerson('observers', id), [])
   const handleAddApprover = useCallback((p) => addPerson('approvers', p), [])
   const handleRemoveApprover = useCallback((id) => removePerson('approvers', id), [])
-  const handleAddCollaborator = useCallback((p) => addPerson('collaborators', p), [])
+
+  // Adding a collaborator is idempotent — if they're already in the list,
+  // do nothing. Lets the department follow-up flow safely call this whenever
+  // a department owner is assigned without producing duplicates.
+  const handleAddCollaborator = useCallback((p) => {
+    if (!p) return
+    setManualPeople((prev) => {
+      const existing = prev.collaborators ?? []
+      if (existing.some((c) => c.id === p.id)) return prev
+      return { ...prev, collaborators: [...existing, p] }
+    })
+  }, [])
+
+  // Removing a collaborator who currently owns one or more department
+  // follow-ups confirms with the user, then clears the owner on those
+  // departments before removing from the collaborators list. One-way sync,
+  // per the design contract.
   const handleRemoveCollaborator = useCallback(
-    (id) => removePerson('collaborators', id),
-    [],
+    (id) => {
+      const ownedDeptIds = getDepartmentsOwnedByPerson(ownerByDepartment, id)
+      if (ownedDeptIds.length > 0) {
+        const personName =
+          ownerByDepartment[ownedDeptIds[0]]?.name ?? 'This person'
+        const deptLabels = ownedDeptIds
+          .map((d) => DEPARTMENTS_BY_ID.get(d)?.label ?? d)
+          .join(', ')
+        const ok = window.confirm(
+          `${personName} owns follow-ups for ${deptLabels}. Removing them will leave those tasks unassigned. Continue?`,
+        )
+        if (!ok) return
+        setOwnerByDepartment((prev) => {
+          const next = { ...prev }
+          for (const d of ownedDeptIds) next[d] = null
+          return next
+        })
+      }
+      removePerson('collaborators', id)
+    },
+    [ownerByDepartment],
   )
 
   // ── Header derived state ────────────────────────────────────────────────
@@ -393,7 +456,11 @@ export default function BulkChangePage({
     ? 'Back to People'
     : stepId === 'define'
       ? 'Back to Select people'
-      : 'Back to Define change set'
+      : stepId === 'edit'
+        ? 'Back to Define change set'
+        : stepId === 'followups'
+          ? 'Back to Make changes'
+          : 'Back to Follow ups'
 
   const currentStepIndex = BULK_CHANGE_STEPS.findIndex((s) => s.id === stepId)
   const selectedEmployees = EMPLOYEES.filter((employee) => finalizedEmployeeIds.includes(employee.id))
@@ -510,14 +577,15 @@ export default function BulkChangePage({
           {stepId === 'edit' && (
             <button
               type="button"
-              disabled
-              className="h-8 pl-3 pr-2.5 rounded-md text-[13px] font-medium flex items-center gap-1.5 bg-rippling-surface-2 text-rippling-muted cursor-not-allowed"
-              title="Follow up steps — coming in next step"
+              onClick={handleContinue}
+              className="h-8 pl-3 pr-2.5 rounded-md text-[13px] font-medium flex items-center gap-1.5 bg-rippling-plum text-white hover:bg-rippling-plum-hover shadow-sm transition-colors"
             >
               <span>Follow up steps</span>
               <ArrowRight size={13} strokeWidth={2} />
             </button>
           )}
+
+          {stepId === 'followups' && null}
         </div>
       </header>
 
@@ -550,6 +618,33 @@ export default function BulkChangePage({
           onAddCollaborator={handleAddCollaborator}
           onRemoveCollaborator={handleRemoveCollaborator}
           onStageCsvDraft={handleStageCsvDraft}
+        />
+      )}
+
+      {stepId === 'followups' && (
+        <FollowUpsStep
+          selectedFieldKeys={selectedFieldKeys}
+          selectedEmployeeIds={finalizedEmployeeIds}
+          bulkValues={bulkValues}
+          cellOverrides={cellOverrides}
+          uniformByField={uniformByField}
+          manualPeople={manualPeople}
+          effectiveDateTime={effectiveDateTime}
+          onEffectiveDateTimeChange={handleEffectiveDateTimeChange}
+          lead={WORKLIST_LEAD}
+          onComplete={handleContinue}
+          onBack={handleBack}
+          onNavigateToEdit={() => setStepId('edit')}
+          onAddObserver={handleAddObserver}
+          onRemoveObserver={handleRemoveObserver}
+          onAddApprover={handleAddApprover}
+          onRemoveApprover={handleRemoveApprover}
+          onAddCollaborator={handleAddCollaborator}
+          onRemoveCollaborator={handleRemoveCollaborator}
+          tasksByDepartment={tasksByDepartment}
+          setTasksByDepartment={setTasksByDepartment}
+          ownerByDepartment={ownerByDepartment}
+          setOwnerByDepartment={setOwnerByDepartment}
         />
       )}
 
