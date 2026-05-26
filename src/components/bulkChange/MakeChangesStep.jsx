@@ -6,12 +6,9 @@ import PropertiesSidebar from './defineChanges/PropertiesSidebar'
 import MakeChangesAskAi from './defineChanges/MakeChangesAskAi'
 import { getCurrentValue } from './defineChanges/currentValues'
 import { useDerivedContext } from './defineChanges/useDerivedContext'
+import { computeRowStatuses } from './defineChanges/validation'
 import { applyFilters } from './bulkChangeUtils'
 import CsvSplitButton from './csv/wizard/CsvSplitButton'
-
-// Stable lookup maps built once at module load
-const ALL_EMPLOYEES_BY_ID = new Map(EMPLOYEES.map((e) => [e.id, e]))
-const EMPLOYEE_BY_NAME = new Map(EMPLOYEES.map((e) => [e.fullName, e]))
 
 /**
  * Step 3 of the Bulk Change wizard — "Make changes".
@@ -55,6 +52,7 @@ export default function MakeChangesStep({
   onRemoveCollaborator,
 }) {
   const [search, setSearch] = useState('')
+  const [activeStatusFilter, setActiveStatusFilter] = useState(null)
   const askAiAnchorRef = useRef(null)
 
   const employees = useMemo(() => {
@@ -64,13 +62,16 @@ export default function MakeChangesStep({
   }, [selectedEmployeeIds])
 
   const filteredEmployees = useMemo(() => {
+    let result = employees
     const q = search.trim().toLowerCase()
-    if (!q) return employees
-    return employees.filter((emp) =>
-      `${emp.fullName} ${emp.title} ${emp.email} ${emp.department}`
-        .toLowerCase()
-        .includes(q),
-    )
+    if (q) {
+      result = result.filter((emp) =>
+        `${emp.fullName} ${emp.title} ${emp.email} ${emp.department}`
+          .toLowerCase()
+          .includes(q),
+      )
+    }
+    return result
   }, [employees, search])
 
   const { observers, approvers, collaborators, steps } = useDerivedContext(
@@ -189,13 +190,29 @@ export default function MakeChangesStep({
     () => [...rowStatuses.values()].filter((v) => v.status === 'warning').length,
     [rowStatuses],
   )
-  const cleanCount = useMemo(
-    () => [...rowStatuses.values()].filter((v) => v.status === 'clean').length,
-    [rowStatuses],
-  )
+
+  // Employees shown in the table after both search and status filter
+  const displayedEmployees = useMemo(() => {
+    if (!activeStatusFilter) return filteredEmployees
+    return filteredEmployees.filter((emp) => {
+      const s = rowStatuses.get(emp.id)
+      return s?.status === activeStatusFilter
+    })
+  }, [filteredEmployees, activeStatusFilter, rowStatuses])
+
+  const handleSearchChange = (value) => {
+    setSearch(value)
+    if (value.trim()) setActiveStatusFilter(null)
+  }
+
+  const handleFilterClick = (kind) => {
+    setActiveStatusFilter((prev) => (prev === kind ? null : kind))
+    setSearch('')
+  }
 
   const setPct = totalCells > 0 ? Math.round((setCount / totalCells) * 100) : 0
   const hiddenBySearchCount = employees.length - filteredEmployees.length
+  const hiddenByFilterCount = filteredEmployees.length - displayedEmployees.length
 
   return (
     <div className="flex-1 min-h-0 flex overflow-hidden">
@@ -213,7 +230,7 @@ export default function MakeChangesStep({
               <input
                 type="text"
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) => handleSearchChange(event.target.value)}
                 placeholder={`Search ${employees.length} ${
                   employees.length === 1 ? 'employee' : 'employees'
                 }...`}
@@ -221,10 +238,29 @@ export default function MakeChangesStep({
               />
             </div>
 
-            {/* Status pills */}
-            <StatusPill kind="error" count={errorCount} label="blockers" />
-            <StatusPill kind="warning" count={warningCount} label="warnings" />
-            <StatusPill kind="clean" count={cleanCount} label="clean" />
+            {/* Status filter pills */}
+            <FilterPill
+              kind="error"
+              count={errorCount}
+              label="blockers"
+              isActive={activeStatusFilter === 'error'}
+              disabled={errorCount === 0}
+              onClick={() => handleFilterClick('error')}
+            />
+            <FilterPill
+              kind="warning"
+              count={warningCount}
+              label="warnings"
+              isActive={activeStatusFilter === 'warning'}
+              disabled={warningCount === 0}
+              onClick={() => handleFilterClick('warning')}
+            />
+            <AllPill
+              total={employees.length}
+              allClean={errorCount === 0 && warningCount === 0}
+              isActive={activeStatusFilter === null}
+              onClick={() => { setActiveStatusFilter(null); setSearch('') }}
+            />
 
             {/* Row / field counts */}
             <span className="text-rippling-line mx-0.5">·</span>
@@ -246,6 +282,14 @@ export default function MakeChangesStep({
                 <span className="text-rippling-line">·</span>
                 <span className="text-[12.5px] text-rippling-muted">
                   {hiddenBySearchCount} hidden by search
+                </span>
+              </>
+            )}
+            {hiddenByFilterCount > 0 && (
+              <>
+                <span className="text-rippling-line">·</span>
+                <span className="text-[12.5px] text-rippling-muted">
+                  {hiddenByFilterCount} hidden by filter
                 </span>
               </>
             )}
@@ -277,7 +321,7 @@ export default function MakeChangesStep({
         {/* ── Spreadsheet — full bleed, table owns scroll ──────────────── */}
         <div className="flex-1 min-h-0 overflow-hidden bg-white border-t border-rippling-line">
           <ChangesTable
-            employees={filteredEmployees}
+            employees={displayedEmployees}
             selectedFieldKeys={selectedFieldKeys}
             bulkValues={bulkValues}
             cellOverrides={cellOverrides}
@@ -354,44 +398,70 @@ function ShortcutHint({ keys, label }) {
   )
 }
 
-/* ── Status pill ─────────────────────────────────────────────────────────── */
+/* ── Filter pills ────────────────────────────────────────────────────────── */
 
-const PILL_STYLES = {
+const FILTER_PILL_STYLES = {
   error: {
     dot: 'bg-red-500',
     pill: 'bg-red-50 text-red-700 border-red-200',
-    pillMuted: 'bg-rippling-surface text-rippling-muted border-rippling-line-2',
+    pillActive: 'bg-red-100 text-red-800 border-red-400 ring-1 ring-red-400',
+    pillMuted: 'bg-rippling-surface text-rippling-muted border-rippling-line-2 cursor-not-allowed opacity-50',
   },
   warning: {
     dot: 'bg-amber-400',
     pill: 'bg-amber-50 text-amber-700 border-amber-200',
-    pillMuted: 'bg-rippling-surface text-rippling-muted border-rippling-line-2',
-  },
-  clean: {
-    dot: 'bg-emerald-500',
-    pill: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    pillMuted: 'bg-rippling-surface text-rippling-muted border-rippling-line-2',
+    pillActive: 'bg-amber-100 text-amber-800 border-amber-400 ring-1 ring-amber-400',
+    pillMuted: 'bg-rippling-surface text-rippling-muted border-rippling-line-2 cursor-not-allowed opacity-50',
   },
 }
 
-function StatusPill({ kind, count, label }) {
-  const styles = PILL_STYLES[kind]
-  const active = count > 0
+function FilterPill({ kind, count, label, isActive, disabled, onClick }) {
+  const styles = FILTER_PILL_STYLES[kind]
+  const colorClass = disabled
+    ? styles.pillMuted
+    : isActive
+      ? styles.pillActive
+      : styles.pill
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full border text-[12px] font-medium transition-colors ${
-        active ? styles.pill : styles.pillMuted
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full border text-[12px] font-medium transition-colors ${colorClass} ${
+        !disabled ? 'hover:opacity-80 cursor-pointer' : ''
       }`}
     >
       <span
-        className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? styles.dot : 'bg-rippling-muted/40'}`}
+        className={`w-1.5 h-1.5 rounded-full shrink-0 ${disabled ? 'bg-rippling-muted/40' : kind === 'error' ? styles.dot : styles.dot}`}
       />
       {count} {label}
-    </span>
+    </button>
   )
 }
 
-/* ── Cell metrics helper ─────────────────────────────────────────────────── */
+function AllPill({ total, allClean, isActive, onClick }) {
+  const colorClass = allClean
+    ? isActive
+      ? 'bg-emerald-100 text-emerald-800 border-emerald-400 ring-1 ring-emerald-400'
+      : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    : isActive
+      ? 'bg-rippling-chip text-rippling-plum border-rippling-plum/30 ring-1 ring-rippling-plum/40'
+      : 'bg-rippling-surface text-rippling-ink-2 border-rippling-line-2'
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full border text-[12px] font-medium transition-colors hover:opacity-80 cursor-pointer ${colorClass}`}
+    >
+      <span
+        className={`w-1.5 h-1.5 rounded-full shrink-0 ${allClean ? 'bg-emerald-500' : 'bg-rippling-muted/40'}`}
+      />
+      {total} all
+    </button>
+  )
+}
+
+/* ── Cell metrics helper ─────────────────────────────────────────────────────────── */
 
 function computeCellMetrics({
   employees,
@@ -431,145 +501,3 @@ function computeCellMetrics({
   return { totalCells, changesCount, setCount }
 }
 
-/* ── Row status helpers ───────────────────────────────────────────────────── */
-
-function parseCompValue(str) {
-  if (!str) return 0
-  const num = parseFloat(String(str).replace(/[$,\s]/g, ''))
-  return isNaN(num) ? 0 : num
-}
-
-/**
- * Deterministic simulation of "this field is already scheduled for edit in
- * another worklist". Flags ~20% of (employee, field) combinations.
- */
-function isScheduledElsewhere(empId, fieldKey) {
-  const raw = empId + '|' + fieldKey
-  let hash = 0
-  for (let i = 0; i < raw.length; i++) hash = (hash * 31 + raw.charCodeAt(i)) | 0
-  return Math.abs(hash) % 5 === 0
-}
-
-/**
- * Walk the manager chain starting from `startEmpId`. At each step, prefer
- * the proposed (new) manager over the existing one. Returns true if we loop
- * back to `startEmpId`.
- */
-function detectCycle(startEmpId, proposedManagerMap) {
-  const visited = new Set()
-  let current = startEmpId
-
-  while (current) {
-    if (visited.has(current)) return true
-    visited.add(current)
-
-    const proposed = proposedManagerMap.get(current)
-    if (proposed !== undefined) {
-      current = proposed
-    } else {
-      current = ALL_EMPLOYEES_BY_ID.get(current)?.managerId ?? null
-    }
-  }
-  return false
-}
-
-/**
- * Compute a per-employee validation status + human-readable reasons for every
- * employee in the current worklist slice.
- *
- * Rules (precedence: error > warning > clean > empty):
- *   error   — cyclic manager chain OR base comp increase > 20 %
- *   warning — field scheduled in another worklist OR base comp increase > 10 %
- *   clean   — at least one genuine change, no errors/warnings
- *   empty   — no cells set for this employee
- *
- * Returns a Map<empId, { status: string, reasons: string[] }>.
- */
-function computeRowStatuses({
-  employees,
-  selectedFieldKeys,
-  bulkValues,
-  cellOverrides,
-  uniformByField,
-}) {
-  // Build proposed-manager map for cycle detection
-  const proposedManagerMap = new Map() // empId → newManagerId | null
-  const managerFieldKey = 'manager'
-  if (selectedFieldKeys.includes(managerFieldKey)) {
-    const mode = uniformByField?.[managerFieldKey] ?? 'uniform'
-    const bulk = bulkValues?.[managerFieldKey]
-    const hasBulk = bulk !== undefined && bulk !== ''
-    for (const emp of employees) {
-      const override = cellOverrides?.[emp.id]?.[managerFieldKey]
-      const hasOverride = override !== undefined && override !== ''
-      const resolved = mode === 'unique'
-        ? hasOverride ? override : hasBulk ? bulk : ''
-        : hasBulk ? bulk : ''
-      if (resolved !== '') {
-        const newManager = EMPLOYEE_BY_NAME.get(resolved)
-        proposedManagerMap.set(emp.id, newManager?.id ?? null)
-      }
-    }
-  }
-
-  const statuses = new Map()
-
-  for (const emp of employees) {
-    const errors = []
-    const warnings = []
-    let hasChange = false
-
-    for (const fieldKey of selectedFieldKeys) {
-      const mode = uniformByField?.[fieldKey] ?? 'uniform'
-      const bulk = bulkValues?.[fieldKey]
-      const hasBulk = bulk !== undefined && bulk !== ''
-      const override = cellOverrides?.[emp.id]?.[fieldKey]
-      const hasOverride = override !== undefined && override !== ''
-      const resolved = mode === 'unique'
-        ? hasOverride ? override : hasBulk ? bulk : ''
-        : hasBulk ? bulk : ''
-
-      if (resolved === '') continue
-
-      const current = getCurrentValue(emp, fieldKey)
-      if (resolved === current) continue
-
-      hasChange = true
-
-      // Comp % increase check
-      if (fieldKey === 'baseCompensation') {
-        const currentNum = parseCompValue(current)
-        const newNum = parseCompValue(resolved)
-        if (currentNum > 0 && newNum > 0) {
-          const pct = (newNum - currentNum) / currentNum
-          const pctStr = `+${Math.round(pct * 100)}%`
-          if (pct > 0.2) errors.push(`Comp increase of ${pctStr} exceeds 20% limit`)
-          else if (pct > 0.1) warnings.push(`Comp increase of ${pctStr} exceeds 10% threshold`)
-        }
-      }
-
-      // Worklist conflict check
-      if (isScheduledElsewhere(emp.id, fieldKey)) {
-        const label = fieldKey.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase())
-        warnings.push(`"${label}" scheduled in another worklist`)
-      }
-    }
-
-    // Cyclic manager check (independent of field loop)
-    if (proposedManagerMap.has(emp.id) && detectCycle(emp.id, proposedManagerMap)) {
-      errors.push('Cyclic manager dependency — this employee would report to themselves')
-    }
-
-    const status = errors.length > 0
-      ? 'error'
-      : warnings.length > 0
-        ? 'warning'
-        : hasChange
-          ? 'clean'
-          : 'empty'
-
-    statuses.set(emp.id, { status, reasons: [...errors, ...warnings] })
-  }
-
-  return statuses
-}
