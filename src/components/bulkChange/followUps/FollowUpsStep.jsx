@@ -1,10 +1,9 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { ArrowRight } from 'lucide-react'
 import { EMPLOYEES } from '../../../data/employees'
 import { buildFollowUpsPlan } from './followUpsConfig'
 import { useFollowUpsRunner } from './useFollowUpsRunner'
 import FollowUpsSubTracker from './FollowUpsSubTracker'
-import SystemChecksPanel from './SystemChecksPanel'
 import CommunicationsPanel from './CommunicationsPanel'
 import IntegrationsPanel from './IntegrationsPanel'
 import DepartmentPanel from './departments/DepartmentPanel'
@@ -16,6 +15,8 @@ import { DEPARTMENTS_BY_ID } from './departments/DEPARTMENTS'
 import PropertiesSidebar from '../defineChanges/PropertiesSidebar'
 import { useDerivedContext } from '../defineChanges/useDerivedContext'
 import { classNames } from '../../../lib/utils'
+import PreviewPanel, { computePreviewGate } from './preview/PreviewPanel'
+import { usePreviewRunner } from './preview/usePreviewRunner'
 
 /**
  * Step 4 of the Bulk Change wizard — "Follow ups".
@@ -55,6 +56,9 @@ export default function FollowUpsStep({
   setTasksByDepartment,
   ownerByDepartment,
   setOwnerByDepartment,
+  // Preview event approver state (lifted to BulkChangePage)
+  approverByEventId,
+  setApproverByEventId,
 }) {
   const plan = useMemo(
     () => buildFollowUpsPlan(selectedFieldKeys),
@@ -109,24 +113,52 @@ export default function FollowUpsStep({
     [employees, selectedFieldKeys, bulkValues, cellOverrides, uniformByField],
   )
 
-  const isSystemChecks = activeSubstep?.kind === 'checks'
+  const isPreview = activeSubstep?.kind === 'preview'
   const isDepartment = activeSubstep?.kind === 'department'
   const isIntegrations = activeSubstep?.kind === 'integrations'
   const isComms = activeSubstep?.kind === 'comms'
 
-  // The existing runner only applies to checks / comms / integrations — not
-  // department panels (which manage their own pre-flight runner internally).
-  const runnerItems = isDepartment ? [] : activeSubstep?.items ?? []
+  // Auto-approvers from event rules → right-rail approvers list (deduplicated by id).
+  // Defined before previewRunner so the stable ref can be passed in.
+  const addedAutoApproverIds = useRef(new Set())
+  const handleAutoApprove = useCallback(
+    (approver) => {
+      if (addedAutoApproverIds.current.has(approver.id)) return
+      addedAutoApproverIds.current.add(approver.id)
+      onAddApprover?.(approver)
+    },
+    [onAddApprover],
+  )
+
+  // Preview runner — single instance, owns all state for gate logic + chip assignment
+  const previewRunner = usePreviewRunner({
+    eventSources: isPreview ? (activeSubstep?.items ?? []) : [],
+    ctx,
+    substepId: activeSubstepId,
+    onAutoApprove: handleAutoApprove,
+  })
+
+  // The existing runner applies to comms / integrations substeps only.
+  // Department panels manage their own runner internally.
+  const runnerItems = (isDepartment || isPreview) ? [] : activeSubstep?.items ?? []
   const { statuses, rerun, allDone, failureCount, warningCount } = useFollowUpsRunner({
     items: runnerItems,
     substepId: activeSubstepId,
     ctx,
-    isSystemChecks,
+    isSystemChecks: false,
   })
 
   // ── Continue gate ──────────────────────────────────────────────────────
 
   const gate = useMemo(() => {
+    if (isPreview) {
+      return computePreviewGate({
+        statuses: previewRunner.statuses,
+        aggregate: previewRunner.aggregate,
+        eventSources: activeSubstep?.items ?? [],
+        allDone: previewRunner.allDone,
+      })
+    }
     if (!isDepartment) {
       return {
         canContinue: allDone,
@@ -153,6 +185,10 @@ export default function FollowUpsStep({
     }
     return { canContinue: true, disabledReason: null }
   }, [
+    isPreview,
+    previewRunner.statuses,
+    previewRunner.aggregate,
+    previewRunner.allDone,
     isDepartment,
     allDone,
     failureCount,
@@ -179,12 +215,40 @@ export default function FollowUpsStep({
   // Sidebar context
   const { observers, approvers, collaborators } = useDerivedContext(selectedFieldKeys, manualPeople)
 
-  // Edit affected employees: navigate back to Make Changes
-  const handleEditAffected = useCallback(
-    (_employeeIds) => {
-      onNavigateToEdit?.()
+  // Deep-link from a Preview event card to the owning substep
+  const handleOpenEventDetails = useCallback(
+    (source) => {
+      const res = source?.ownsResolution
+      if (!res) return
+      if (res.kind === 'integration') {
+        setActiveSubstepId('integrations')
+      } else if (res.kind === 'department') {
+        setActiveSubstepId(`dept.${res.id}`)
+      } else if (res.kind === 'comms') {
+        setActiveSubstepId('communications')
+      }
     },
-    [onNavigateToEdit],
+    [],
+  )
+
+  // Reviewer assignment on Preview event cards → collaborators list (not approvers)
+  const handleAssignEventApprover = useCallback(
+    (eventId, person) => {
+      setApproverByEventId?.((prev) => ({ ...prev, [eventId]: person }))
+      onAddCollaborator?.(person)
+    },
+    [setApproverByEventId, onAddCollaborator],
+  )
+
+  const handleRemoveEventApprover = useCallback(
+    (eventId) => {
+      setApproverByEventId?.((prev) => {
+        const next = { ...prev }
+        delete next[eventId]
+        return next
+      })
+    },
+    [setApproverByEventId],
   )
 
   // ── Render department panel data ───────────────────────────────────────
@@ -230,21 +294,33 @@ export default function FollowUpsStep({
             {/* Step intro */}
             <div className="mb-6 text-center">
               <h2 className="text-[17px] font-semibold text-rippling-ink tracking-tight">
-                Follow up steps
+                {isPreview ? 'Pre-flight review' : 'Follow up steps'}
               </h2>
               <p className="text-[13px] text-rippling-muted mt-1">
-                Complete each step below before applying your changes.
+                {isPreview
+                  ? 'Review every event your change will trigger before submitting.'
+                  : 'Complete each step below before applying your changes.'}
               </p>
             </div>
 
             {/* Panel card */}
-            <div className="bg-white rounded-xl border border-rippling-line shadow-rippling-card p-6">
-              {isSystemChecks && (
-                <SystemChecksPanel
-                  items={activeSubstep.items}
-                  statuses={statuses}
-                  onRerun={rerun}
-                  onEditAffected={handleEditAffected}
+            <div className={classNames(
+              'rounded-xl border border-rippling-line',
+              isPreview ? 'bg-rippling-surface p-0' : 'bg-white shadow-rippling-card p-6',
+            )}>
+              {isPreview && (
+                <PreviewPanel
+                  eventSources={activeSubstep?.items ?? []}
+                  totalEmployees={ctx?.employees?.length ?? 0}
+                  statuses={previewRunner.statuses}
+                  assignApprover={previewRunner.assignApprover}
+                  removeApprover={previewRunner.removeApprover}
+                  aggregate={previewRunner.aggregate}
+                  allDone={previewRunner.allDone}
+                  triggeredByTier={previewRunner.triggeredByTier}
+                  onAssignApprover={handleAssignEventApprover}
+                  onRemoveApprover={handleRemoveEventApprover}
+                  onOpenDetails={handleOpenEventDetails}
                 />
               )}
 
@@ -285,16 +361,13 @@ export default function FollowUpsStep({
               )}
             </div>
 
-            {/* Status summaries */}
-            {!isDepartment && failureCount > 0 && !isIntegrations && (
+            {/* Status summaries — only for comms/integrations, Preview manages its own */}
+            {!isDepartment && !isPreview && failureCount > 0 && !isIntegrations && (
               <p className="text-center text-[12.5px] text-red-600 mt-4">
-                {failureCount} item{failureCount > 1 ? 's' : ''} failed —{' '}
-                {isSystemChecks
-                  ? 'fix the highlighted employees in Make Changes to continue.'
-                  : 'click Re-run on each failed item to retry.'}
+                {failureCount} item{failureCount > 1 ? 's' : ''} failed — click Re-run on each failed item to retry.
               </p>
             )}
-            {!isDepartment && failureCount === 0 && warningCount > 0 && (
+            {!isDepartment && !isPreview && failureCount === 0 && warningCount > 0 && (
               <p className="text-center text-[12.5px] text-amber-600 mt-4">
                 {warningCount} warning{warningCount > 1 ? 's' : ''} noted — you can continue when ready.
               </p>

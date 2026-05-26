@@ -7,7 +7,7 @@ import {
   ShieldCheck,
   PlugZap,
   GitMerge,
-  Play,
+  Users,
 } from 'lucide-react'
 import { classNames } from '../../../lib/utils'
 
@@ -18,6 +18,11 @@ const KIND_META = {
   validation: { Icon: ShieldCheck, color: 'text-green-500', bg: 'bg-green-50' },
   integration: { Icon: PlugZap, color: 'text-indigo-500', bg: 'bg-indigo-50' },
   approval: { Icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+  // follow-up plan kinds
+  checks: { Icon: ShieldCheck, color: 'text-green-500', bg: 'bg-green-50' },
+  department: { Icon: Users, color: 'text-amber-500', bg: 'bg-amber-50' },
+  comms: { Icon: Bell, color: 'text-purple-500', bg: 'bg-purple-50' },
+  integrations: { Icon: PlugZap, color: 'text-indigo-500', bg: 'bg-indigo-50' },
   default: { Icon: Zap, color: 'text-rippling-muted', bg: 'bg-rippling-surface-2' },
 }
 
@@ -25,22 +30,12 @@ function kindMeta(kind) {
   return KIND_META[kind] ?? KIND_META.default
 }
 
-function StepNode({ step, index, isChild, isLast, parentIsLast }) {
+function StepNode({ step }) {
   const { Icon, color, bg } = kindMeta(step.kind)
-  const hasChildren = step.children && step.children.length > 0
 
   return (
     <li className="relative">
-      {/* Vertical connector line from parent */}
-      {isChild && !isLast && (
-        <span
-          aria-hidden
-          className="absolute left-[11px] top-6 bottom-0 w-px bg-rippling-line"
-        />
-      )}
-
       <div className="flex items-start gap-2.5 py-1.5">
-        {/* Step icon */}
         <span
           className={classNames(
             'shrink-0 h-5 w-5 rounded-full flex items-center justify-center mt-0.5',
@@ -59,21 +54,6 @@ function StepNode({ step, index, isChild, isLast, parentIsLast }) {
           </div>
         </div>
       </div>
-
-      {/* Children */}
-      {hasChildren && (
-        <ul className="ml-6 relative before:absolute before:left-[-12px] before:top-0 before:bottom-0 before:w-px before:bg-rippling-line">
-          {step.children.map((child, ci) => (
-            <StepNode
-              key={child.id}
-              step={child}
-              index={ci}
-              isChild
-              isLast={ci === step.children.length - 1}
-            />
-          ))}
-        </ul>
-      )}
     </li>
   )
 }
@@ -147,13 +127,8 @@ export default function ProcessFlow({ steps }) {
           />
         )}
 
-        {steps.map((step, i) => (
-          <StepNode
-            key={step.id}
-            step={step}
-            index={i}
-            isLast={i === steps.length - 1}
-          />
+        {steps.map((step) => (
+          <StepNode key={step.id} step={step} />
         ))}
 
         {/* Separator between derived and fixed */}
