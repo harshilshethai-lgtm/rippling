@@ -101,6 +101,14 @@ export default function BulkChangePage({
   // Shape: { [eventId]: { id, name, role } }
   const [approverByEventId, setApproverByEventId] = useState({})
 
+  // Department approval state — keyed by deptId.
+  // Shape: { [deptId]: { action: 'approved'|'approvedWithExceptions'|'rejected'|'requestChanges'|null, exceptions: string } | null }
+  const [approvalByDepartment, setApprovalByDepartment] = useState({})
+
+  // SLA date per department — keyed by deptId.
+  // Shape: { [deptId]: 'YYYY-MM-DD' | null }
+  const [slaByDepartment, setSlaByDepartment] = useState({})
+
   const handleEffectiveDateTimeChange = useCallback((patch) => {
     setEffectiveDateTime((prev) => ({ ...prev, ...patch }))
   }, [])
@@ -638,6 +646,7 @@ export default function BulkChangePage({
           effectiveDateTime={effectiveDateTime}
           onEffectiveDateTimeChange={handleEffectiveDateTimeChange}
           lead={WORKLIST_LEAD}
+          worklistName={worklistName}
           onComplete={handleContinue}
           onBack={handleBack}
           onNavigateToEdit={() => setStepId('edit')}
@@ -651,6 +660,10 @@ export default function BulkChangePage({
           setTasksByDepartment={setTasksByDepartment}
           ownerByDepartment={ownerByDepartment}
           setOwnerByDepartment={setOwnerByDepartment}
+          approvalByDepartment={approvalByDepartment}
+          setApprovalByDepartment={setApprovalByDepartment}
+          slaByDepartment={slaByDepartment}
+          setSlaByDepartment={setSlaByDepartment}
           approverByEventId={approverByEventId}
           setApproverByEventId={setApproverByEventId}
         />

@@ -42,7 +42,7 @@ const TIER_STYLES = {
  *   onOpenDetails(source) — navigate to the owning substep
  *   isLoading  — bool (entry still pending/running)
  */
-export default function EventCard({ source, entry, onAssignApprover, onRemoveApprover, onOpenDetails }) {
+export default function EventCard({ source, entry, onAssignApprover, onRemoveApprover, onOpenDetails, hideApproverChip = false }) {
   const [expanded, setExpanded] = useState(false)
   const [showAll, setShowAll] = useState(false)
 
@@ -181,8 +181,8 @@ export default function EventCard({ source, entry, onAssignApprover, onRemoveApp
                 )}
               </button>
 
-              {/* Approver chip — only for events that require approval */}
-              {source.requiresApproval && (
+              {/* Approver chip — only for events that require approval, and not hidden by context */}
+              {source.requiresApproval && !hideApproverChip && (
                 <EventApproverChip
                   approver={approver}
                   onAssign={(person) => onAssignApprover?.(source.id, person)}

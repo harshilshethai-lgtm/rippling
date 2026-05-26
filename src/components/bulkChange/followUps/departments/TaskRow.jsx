@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, Lock, RotateCcw, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Clock, Lock, RotateCcw, Trash2, UserPlus } from 'lucide-react'
 import TaskDueDateField from './TaskDueDateField'
 import { classNames } from '../../../../lib/utils'
 
@@ -131,6 +131,59 @@ export default function TaskRow({
                 >
                   {task.title || 'Untitled task — click to name'}
                 </button>
+              )}
+
+              {/* Acknowledgment actions — shown when task is pending */}
+              {task.taskAction === 'pending' && (
+                <div className="mt-2 flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => onUpdate({ taskAction: 'accepted' })}
+                    className="inline-flex items-center gap-1 h-6 px-2 rounded-md bg-emerald-50 border border-emerald-200 text-[11.5px] font-medium text-emerald-700 hover:bg-emerald-100 transition-colors"
+                  >
+                    <Check size={10} strokeWidth={2.5} />
+                    Accept
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onUpdate({ taskAction: 'reassigned' })}
+                    className="inline-flex items-center gap-1 h-6 px-2 rounded-md border border-rippling-line bg-white text-[11.5px] font-medium text-rippling-muted hover:text-rippling-ink hover:bg-rippling-surface transition-colors"
+                  >
+                    <UserPlus size={10} strokeWidth={2} />
+                    Reassign
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onUpdate({ taskAction: 'deferred' })}
+                    className="inline-flex items-center gap-1 h-6 px-2 rounded-md border border-rippling-line bg-white text-[11.5px] font-medium text-rippling-muted hover:text-rippling-ink hover:bg-rippling-surface transition-colors"
+                  >
+                    <Clock size={10} strokeWidth={2} />
+                    Defer
+                  </button>
+                </div>
+              )}
+
+              {/* Acknowledged state badge */}
+              {task.taskAction && task.taskAction !== 'pending' && (
+                <div className="mt-1.5 flex items-center gap-2">
+                  <span className={classNames(
+                    'inline-flex items-center gap-1 h-5 px-2 rounded-full text-[10.5px] font-medium',
+                    task.taskAction === 'accepted' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                    task.taskAction === 'deferred' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                    'bg-blue-50 text-blue-700 border border-blue-200',
+                  )}>
+                    {task.taskAction === 'accepted' && <Check size={9} strokeWidth={2.5} />}
+                    {task.taskAction === 'accepted' ? 'Accepted' :
+                     task.taskAction === 'deferred' ? 'Deferred' : 'Reassigned'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onUpdate({ taskAction: 'pending' })}
+                    className="text-[10.5px] text-rippling-muted hover:text-rippling-plum transition-colors"
+                  >
+                    Undo
+                  </button>
+                </div>
               )}
 
               {/* Meta line: due date + expand toggle */}

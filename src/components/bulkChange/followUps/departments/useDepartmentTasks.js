@@ -95,6 +95,7 @@ export function useDepartmentTasks({
               sourceFieldKey: fk,
               isSystem: true,
               descriptionOverridden: false,
+              taskAction: 'pending',
             })
             changed = true
           }
@@ -167,6 +168,7 @@ export function useDepartmentTasks({
           sourceFieldKey,
           isSystem: false,
           descriptionOverridden: false,
+          taskAction: 'pending',
         }
 
         // Insert after the last task in the same fieldKey group so it stays
@@ -273,26 +275,47 @@ export function getDepartmentsOwnedByPerson(ownerByDepartment, personId) {
 }
 
 /**
- * Returns whether every active department has an owner and every task in
- * every active department has a due date. Used by FollowUpsStep to gate the
- * Continue button.
+ * Gate for a single department panel — domain approval action must be taken
+ * and every human task must be acknowledged (accepted or deferred).
+ */
+export function getDepartmentApprovalGate({ deptId, tasks, approvalByDepartment }) {
+  const approval = approvalByDepartment?.[deptId]
+  if (!approval?.action) {
+    return { canContinue: false, disabledReason: 'Approve or reject your domain slice to continue' }
+  }
+  const unacknowledged = (tasks ?? []).filter((t) => t.taskAction === 'pending').length
+  if (unacknowledged > 0) {
+    return {
+      canContinue: false,
+      disabledReason: `Acknowledge ${unacknowledged} task${unacknowledged === 1 ? '' : 's'} to continue`,
+    }
+  }
+  return { canContinue: true, disabledReason: null }
+}
+
+/**
+ * Aggregate gate across all active departments.
+ * Returns how many depts are still missing an approval action or have
+ * unacknowledged tasks — used for the sub-tracker footer caption.
  */
 export function getDepartmentGateState({
   activeDeptIds,
   tasksByDepartment,
-  ownerByDepartment,
+  approvalByDepartment,
 }) {
-  const missing = { ownerCount: 0, dueDateCount: 0 }
+  let missingApprovalCount = 0
+  let unacknowledgedTaskCount = 0
   for (const deptId of activeDeptIds) {
-    if (!ownerByDepartment[deptId]) missing.ownerCount += 1
+    const approval = approvalByDepartment?.[deptId]
+    if (!approval?.action) missingApprovalCount += 1
     const tasks = tasksByDepartment[deptId] ?? []
     for (const t of tasks) {
-      if (!t.dueDate) missing.dueDateCount += 1
+      if (t.taskAction === 'pending') unacknowledgedTaskCount += 1
     }
   }
   return {
-    canContinue: missing.ownerCount === 0 && missing.dueDateCount === 0,
-    missingOwnerCount: missing.ownerCount,
-    missingDueDateCount: missing.dueDateCount,
+    canContinue: missingApprovalCount === 0 && unacknowledgedTaskCount === 0,
+    missingApprovalCount,
+    unacknowledgedTaskCount,
   }
 }
