@@ -91,13 +91,33 @@ export const SYSTEM_CHECK_ITEMS = [
   },
 ]
 
-/** Communications definitions, each with a `condition` for inclusion */
+/**
+ * Communications definitions, each with a `condition` for inclusion.
+ *
+ * commType: 'email' | 'notification' | 'document'
+ * recipients: array of recipient role strings shown as chips
+ * channel: default channel
+ * send: default send timing
+ * signature: null (email/notification) | 'Requires signature' | 'Acknowledgment only' | 'Informational' (document)
+ * templateOptions: list of selectable template names for the dropdown
+ */
 export const COMMUNICATIONS_CONFIGS = [
   {
     id: 'comm.compLetter',
-    label: 'Send compensation change letter',
+    label: 'Manager comp summary for direct reports',
     sublabel: 'Generated letter sent to each affected employee',
     kind: 'comm',
+    commType: 'email',
+    recipients: ['New Manager'],
+    channel: 'Email',
+    send: 'On commit',
+    signature: null,
+    templateOptions: [
+      'Manager comp summary for direct reports',
+      'Compensation change summary',
+      'Pay adjustment notice',
+      'Annual review letter',
+    ],
     condition: (fieldKeys) =>
       fieldKeys.some((k) => {
         const f = FIELDS_BY_KEY.get(k)
@@ -109,49 +129,189 @@ export const COMMUNICATIONS_CONFIGS = [
     ],
   },
   {
-    id: 'comm.managerNotify',
-    label: 'Notify previous and new manager',
-    sublabel: 'Automated email to both managers',
+    id: 'comm.hrbpNotify',
+    label: 'HRBP cycle close-out',
+    sublabel: 'Summary email to the assigned HRBP',
     kind: 'comm',
-    condition: (fieldKeys) =>
-      fieldKeys.includes('manager') || fieldKeys.includes('jobsManager'),
+    commType: 'email',
+    recipients: ['HRBP'],
+    channel: 'Email',
+    send: 'On commit',
+    signature: null,
+    templateOptions: [
+      'HRBP cycle close-out',
+      'HRBP summary notification',
+      'HR partner update',
+    ],
+    condition: () => true,
     errorMessages: [
-      'Manager notification email bounced for 1 recipient. Retry to re-send.',
-      'Email service returned a 503. Retry in a moment.',
+      'HRBP notification email could not be delivered. Retry.',
+      'Email service timed out. Retry in a moment.',
     ],
   },
   {
-    id: 'comm.employmentAgreement',
-    label: 'Send updated employment agreement',
-    sublabel: 'DocuSign envelope sent for e-signature',
+    id: 'comm.fyLetter',
+    label: 'Your FY26 letter is ready',
+    sublabel: 'In-product notification to each affected employee',
     kind: 'comm',
-    condition: (fieldKeys) => fieldKeys.includes('employmentType'),
+    commType: 'notification',
+    recipients: ['Employee'],
+    channel: 'Rippling inbox',
+    send: 'On effective date',
+    signature: null,
+    templateOptions: [
+      'Your FY26 letter is ready',
+      'Compensation letter available',
+      'New letter in your inbox',
+    ],
+    condition: (fieldKeys) =>
+      fieldKeys.some((k) => {
+        const f = FIELDS_BY_KEY.get(k)
+        return f && (f.sectionId === 'pay' || f.sectionId === 'compensation')
+      }),
+    errorMessages: [
+      'Notification delivery failed for 1 employee. Retry.',
+      'Rippling inbox service timed out. Retry in a moment.',
+    ],
+  },
+  {
+    id: 'comm.managerNotify',
+    label: 'You have a new direct report',
+    sublabel: 'Slack notification to the new manager',
+    kind: 'comm',
+    commType: 'notification',
+    recipients: ['New Manager'],
+    channel: 'Slack',
+    send: 'On effective date',
+    signature: null,
+    templateOptions: [
+      'You have a new direct report',
+      'Team change notification',
+      'New report joining your team',
+    ],
+    condition: (fieldKeys) =>
+      fieldKeys.includes('manager') || fieldKeys.includes('jobsManager'),
+    errorMessages: [
+      'Slack notification failed for 1 recipient. Retry to re-send.',
+      'Slack API returned a 503. Retry in a moment.',
+    ],
+  },
+  {
+    id: 'comm.totalCompStatement',
+    label: 'Total Compensation Statement — FY26',
+    sublabel: 'DocuSign envelope requiring employee e-signature',
+    kind: 'comm',
+    commType: 'document',
+    recipients: ['Employee'],
+    channel: 'Email',
+    send: 'On effective date',
+    signature: 'Requires signature',
+    templateOptions: [
+      'Total Compensation Statement — FY26',
+      'Total Compensation Statement — FY25',
+      'Total Rewards overview',
+    ],
+    condition: (fieldKeys) =>
+      fieldKeys.some((k) => {
+        const f = FIELDS_BY_KEY.get(k)
+        return f && (f.sectionId === 'pay' || f.sectionId === 'compensation')
+      }),
     errorMessages: [
       'DocuSign envelope creation failed — the template may be missing required fields. Retry.',
       'DocuSign API is temporarily unavailable. Retry in a moment.',
     ],
   },
   {
-    id: 'comm.roleAnnouncement',
-    label: 'Send role change announcement',
-    sublabel: 'Internal announcement to the team',
+    id: 'comm.promotionLetter',
+    label: 'Promotion letter',
+    sublabel: 'Promotion confirmation requiring employee signature',
     kind: 'comm',
+    commType: 'document',
+    recipients: ['Employee'],
+    channel: 'Email',
+    send: 'On effective date',
+    signature: 'Requires signature',
+    templateOptions: [
+      'Promotion letter',
+      'Level change confirmation',
+      'Role promotion acknowledgment',
+    ],
     condition: (fieldKeys) =>
       fieldKeys.includes('title') || fieldKeys.includes('level'),
     errorMessages: [
-      'Announcement could not be posted — Slack channel access may have changed. Retry.',
-      'Announcement delivery failed for 1 employee. Retry.',
+      'DocuSign envelope creation failed — the template may be missing required fields. Retry.',
+      'DocuSign API is temporarily unavailable. Retry in a moment.',
     ],
   },
   {
-    id: 'comm.hrbpNotify',
-    label: 'Notify HR Business Partner',
-    sublabel: 'Summary email to the assigned HRBP',
+    id: 'comm.compBandAck',
+    label: 'Compensation band acknowledgment',
+    sublabel: 'Employee acknowledges new compensation band',
     kind: 'comm',
-    condition: () => true,
+    commType: 'document',
+    recipients: ['Employee'],
+    channel: 'Email',
+    send: 'On commit',
+    signature: 'Acknowledgment only',
+    templateOptions: [
+      'Compensation band acknowledgment',
+      'Pay range acknowledgment',
+      'Salary band confirmation',
+    ],
+    condition: (fieldKeys) =>
+      fieldKeys.some((k) => {
+        const f = FIELDS_BY_KEY.get(k)
+        return f && (f.sectionId === 'pay' || f.sectionId === 'compensation')
+      }),
     errorMessages: [
-      'HRBP notification email could not be delivered. Retry.',
+      'Document delivery failed for 1 employee. Retry.',
       'Email service timed out. Retry in a moment.',
+    ],
+  },
+  {
+    id: 'comm.totalRewardsOverview',
+    label: 'FY26 Total Rewards overview',
+    sublabel: 'Informational overview sent to employee and manager',
+    kind: 'comm',
+    commType: 'document',
+    recipients: ['Employee', 'New Manager'],
+    channel: 'Email',
+    send: 'On commit',
+    signature: 'Informational',
+    templateOptions: [
+      'FY26 Total Rewards overview',
+      'FY25 Total Rewards overview',
+      'Benefits and compensation summary',
+    ],
+    condition: (fieldKeys) =>
+      fieldKeys.some((k) => {
+        const f = FIELDS_BY_KEY.get(k)
+        return f && (f.sectionId === 'pay' || f.sectionId === 'compensation')
+      }),
+    errorMessages: [
+      'Document delivery failed for 1 employee. Retry.',
+      'Email service timed out. Retry in a moment.',
+    ],
+  },
+  {
+    id: 'comm.employmentAgreement',
+    label: 'Updated employment agreement',
+    sublabel: 'DocuSign envelope sent for e-signature',
+    kind: 'comm',
+    commType: 'document',
+    recipients: ['Employee'],
+    channel: 'Email',
+    send: 'On effective date',
+    signature: 'Requires signature',
+    templateOptions: [
+      'Updated employment agreement',
+      'Employment contract amendment',
+      'New employment terms',
+    ],
+    condition: (fieldKeys) => fieldKeys.includes('employmentType'),
+    errorMessages: [
+      'DocuSign envelope creation failed — the template may be missing required fields. Retry.',
+      'DocuSign API is temporarily unavailable. Retry in a moment.',
     ],
   },
 ]
@@ -161,113 +321,261 @@ export const COMMUNICATIONS_CONFIGS = [
 const INTEGRATION_DEFS = {
   carta: {
     id: 'int.carta',
-    label: 'Update Carta equity grants',
-    sublabel: 'Carta cap table integration',
+    label: 'Carta',
+    sublabel: 'Cap table & equity integration',
     kind: 'write',
     errorMessages: [
       'Carta could not locate matching equity grants for 1 employee. Retry or resolve manually in Carta.',
       'Carta API is temporarily unavailable (503). Retry in a moment.',
     ],
+    mockImpact: {
+      users: 12,
+      confidence: 'High',
+      grants: [
+        { name: 'Priya Sharma', role: 'equity-admin', via: 'eng-leads-global' },
+        { name: '11 others', role: 'view', repos: null, via: 'equity-participants group' },
+      ],
+      loses: [],
+      undefined: [],
+    },
   },
   adp: {
     id: 'int.adp',
-    label: 'Push to ADP Workforce Now',
-    sublabel: 'ADP Workforce Now integration',
+    label: 'ADP Workforce Now',
+    sublabel: 'Payroll & benefits integration',
     kind: 'write',
     errorMessages: [
       'ADP returned a 409 conflict — the record may have been modified externally. Retry to force-sync.',
       'ADP API rate limit reached. Wait 30 seconds, then retry.',
     ],
+    mockImpact: {
+      users: 14,
+      confidence: 'Medium',
+      grants: [
+        { name: 'Connor Hall', role: 'payroll-admin', via: 'finance-leads-amer' },
+        { name: '9 others', role: 'standard', via: 'adp-employees group' },
+      ],
+      loses: [
+        { name: '4 others', role: 'standard', system: 'payroll', via: 'left adp-employees group' },
+      ],
+      undefined: [
+        { name: 'Marcus Lee', reason: 'ADP record ID mismatch — employee may have been merged.', action: 'Reconcile manually' },
+      ],
+    },
   },
   slack: {
     id: 'int.slack',
-    label: 'Update Slack channels',
-    sublabel: 'Slack integration',
+    label: 'Slack',
+    sublabel: 'Channels & workspace access',
     kind: 'write',
     errorMessages: [
       'Slack workspace returned 503 — try again in a moment.',
       'Slack channel update failed — the bot may have been removed from the channel. Retry after verifying.',
     ],
+    mockImpact: {
+      users: 87,
+      confidence: 'High',
+      grants: [
+        { name: 'Wei Zhang', role: 'channel-manager', via: 'eng-leads-emea' },
+        { name: 'Elena Martinez', role: 'channel-manager', via: 'eng-leads-amer' },
+        { name: '76 others', role: 'member', via: 'eng-all-hands channel' },
+      ],
+      loses: [
+        { name: '14 contractors', role: 'member', system: 'eng-internal', via: 'left contractor-eng group' },
+      ],
+      undefined: [],
+    },
   },
   googleGroups: {
     id: 'int.googleGroups',
-    label: 'Update Google Groups',
-    sublabel: 'Google Workspace integration',
+    label: 'Google Workspace',
+    sublabel: 'Groups & directory integration',
     kind: 'write',
     errorMessages: [
       'Google Admin SDK returned a quota exceeded error. Retry after a few minutes.',
       'Google Groups update failed for 1 user — the group may not exist. Retry after verifying.',
     ],
+    mockImpact: {
+      users: 111,
+      confidence: 'High',
+      grants: [
+        { name: 'Raj Patel', role: 'group-owner', via: 'eng-leads-amer' },
+        { name: '91 others', role: 'member', via: 'google-workspace-users group' },
+      ],
+      loses: [
+        { name: '12 others', role: 'member', system: 'workspace', via: 'left team-workspace group' },
+      ],
+      undefined: [],
+    },
   },
   workday: {
     id: 'int.workday',
-    label: 'Sync to Workday HCM',
-    sublabel: 'Workday HCM integration',
+    label: 'Workday HCM',
+    sublabel: 'HR system of record',
     kind: 'write',
     errorMessages: [
       'Workday integration credentials have expired. Re-authenticate in Settings → Integrations, then retry.',
       'Workday returned a validation error on the position field. Retry after verifying job codes.',
     ],
+    mockImpact: {
+      users: 89,
+      confidence: 'High',
+      grants: [
+        { name: '52 others', role: 'hcm-user', via: 'workday-employees group' },
+      ],
+      loses: [
+        { name: '28 others', role: 'hcm-user', system: 'workday', via: 'left workday-employees group' },
+      ],
+      undefined: [
+        { name: 'Diane Foster', reason: 'Position code not found in Workday job catalog.', action: 'Map position code' },
+        { name: 'James Wu', reason: 'Workday org unit ID mismatch for new department.', action: 'Update org unit' },
+        { name: '2 others', reason: 'Workday record ID could not be resolved.', action: 'Reconcile manually' },
+      ],
+    },
   },
   bamboohr: {
     id: 'int.bamboohr',
-    label: 'Sync to BambooHR',
-    sublabel: 'BambooHR integration',
+    label: 'BambooHR',
+    sublabel: 'HR data sync',
     kind: 'write',
     errorMessages: [
       'BambooHR returned a 404 — the employee record may not exist in BambooHR yet. Retry after syncing.',
       'BambooHR API is temporarily unavailable. Retry in a moment.',
     ],
+    mockImpact: {
+      users: 23,
+      confidence: 'Medium',
+      grants: [
+        { name: '18 others', role: 'employee', via: 'bamboohr-users group' },
+      ],
+      loses: [
+        { name: '5 others', role: 'employee', system: 'bamboohr', via: 'left bamboohr-users group' },
+      ],
+      undefined: [
+        { name: 'Ana Ruiz', reason: 'BambooHR employee ID not found.', action: 'Link account' },
+      ],
+    },
   },
   okta: {
     id: 'int.okta',
-    label: 'Update Okta group membership',
-    sublabel: 'Okta integration',
+    label: 'Okta',
+    sublabel: 'Identity & SSO provisioning',
     kind: 'write',
     errorMessages: [
       'Okta returned a 429 rate-limit error. Wait 60 seconds, then retry.',
       'Okta group assignment failed — the target group may have been deleted. Retry after verifying.',
     ],
+    mockImpact: {
+      users: 89,
+      confidence: 'High',
+      grants: [
+        { name: 'Wei Zhang', role: 'admin', via: 'billing-svc group' },
+        { name: '51 others', role: 'standard', via: 'okta-employees group' },
+      ],
+      loses: [
+        { name: 'Noah Williams', role: 'admin', system: 'billing-svc', via: 'left billing-team group' },
+        { name: '27 others', role: 'standard', system: 'okta', via: 'left okta-employees group' },
+      ],
+      undefined: [
+        { name: 'Sara Cohen', reason: 'Account exists in Okta but not linked in Rippling SCIM.', action: 'Map manually' },
+        { name: 'Liu Wang', reason: 'Account exists in Okta but not linked in Rippling SCIM.', action: 'Map manually' },
+        { name: '2 others', reason: 'SCIM provisioning returned ambiguous match.', action: 'Retry at commit' },
+      ],
+    },
   },
   gsuite: {
     id: 'int.gsuite',
-    label: 'Provision Google Workspace account',
-    sublabel: 'Google Workspace integration',
+    label: 'Google Workspace',
+    sublabel: 'Account provisioning',
     kind: 'write',
     errorMessages: [
       'Google Admin SDK returned a quota exceeded error. Retry after a few minutes.',
       'Google Workspace provisioning failed for 1 user — the account may already exist. Retry.',
     ],
+    mockImpact: {
+      users: 34,
+      confidence: 'High',
+      grants: [
+        { name: '28 others', role: 'workspace-user', via: 'gsuite-employees group' },
+      ],
+      loses: [
+        { name: '6 others', role: 'workspace-user', system: 'gsuite', via: 'left gsuite-employees group' },
+      ],
+      undefined: [],
+    },
   },
   github: {
     id: 'int.github',
-    label: 'Update GitHub teams',
-    sublabel: 'GitHub integration',
+    label: 'GitHub',
+    sublabel: 'Teams & repository access',
     kind: 'write',
     errorMessages: [
       'GitHub returned a 422 — the team slug may have changed. Retry after verifying team names.',
       'GitHub API is temporarily unavailable. Retry in a moment.',
     ],
+    mockImpact: {
+      users: 58,
+      confidence: 'High',
+      grants: [
+        { name: 'Wei Zhang', role: 'org-admin', via: 'eng-leads-emea' },
+        { name: 'Raj Patel', role: 'org-admin', via: 'eng-leads-amer' },
+        { name: 'Connor Hall', role: 'org-admin', via: 'eng-leads-amer' },
+        { name: 'Elena Martinez', role: 'org-admin', via: 'eng-leads-amer' },
+        { name: '37 others', role: 'write', repos: 'eng-* repos', via: 'eng-ic-amer' },
+      ],
+      loses: [
+        { name: '11 contractors', role: 'read', system: 'eng-internal', via: 'left contractor-eng group' },
+        { name: 'Noah Williams', role: 'admin', system: 'billing-svc', via: 'left billing-team group' },
+        { name: '2 others', role: 'admin', system: 'payments-svc', via: 'left payments-team group' },
+      ],
+      undefined: [
+        { name: 'Tom Reyes', reason: 'External webhook for org membership returned 503 at preview.', action: 'Retry at commit' },
+        { name: 'Sara Cohen', reason: 'Account exists in GitHub but not linked in Rippling SCIM.', action: 'Map manually' },
+        { name: 'Liu Wang', reason: 'Account exists in GitHub but not linked in Rippling SCIM.', action: 'Map manually' },
+      ],
+    },
   },
   notion: {
     id: 'int.notion',
-    label: 'Update Notion workspace access',
-    sublabel: 'Notion integration',
+    label: 'Notion',
+    sublabel: 'Workspace access',
     kind: 'write',
     errorMessages: [
       'Notion workspace invitation failed — the user may already be a member. Retry.',
       'Notion API returned an error. Retry in a moment.',
     ],
+    mockImpact: {
+      users: 18,
+      confidence: 'Medium',
+      grants: [
+        { name: '14 others', role: 'member', via: 'notion-workspace group' },
+      ],
+      loses: [
+        { name: '4 others', role: 'member', system: 'notion', via: 'left notion-workspace group' },
+      ],
+      undefined: [
+        { name: 'Priya Sharma', reason: 'Notion account email does not match Rippling work email.', action: 'Update email' },
+      ],
+    },
   },
   syncRecord: {
     id: 'int.syncRecord',
-    label: 'Sync employee record',
-    sublabel: 'Rippling HRIS — syncs remaining field changes to connected systems',
+    label: 'Rippling HRIS',
+    sublabel: 'Syncs remaining field changes to connected systems',
     kind: 'write',
     errorMessages: [
       'Record sync failed — a concurrent edit may have locked this employee. Retry.',
       'Rippling returned an unexpected error while syncing. Retry.',
     ],
+    mockImpact: {
+      users: 89,
+      confidence: 'High',
+      grants: [
+        { name: '89 others', role: 'hris-user', via: 'rippling-employees group' },
+      ],
+      loses: [],
+      undefined: [],
+    },
   },
 }
 

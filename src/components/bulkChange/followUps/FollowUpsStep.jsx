@@ -76,6 +76,12 @@ export default function FollowUpsStep({
   const [activeSubstepId, setActiveSubstepId] = useState(plan[0]?.id ?? 'systemChecks')
   const [completedIds, setCompletedIds] = useState(new Set())
 
+  // Lifted comm items state so edits persist across substep navigation
+  const [commItems, setCommItems] = useState(() => {
+    const commsSubstep = plan.find((s) => s.kind === 'comms')
+    return commsSubstep?.items ?? []
+  })
+
   // If the plan reshapes (e.g. user changed field selection upstream), keep
   // the active substep valid.
   const activeIndex = plan.findIndex((s) => s.id === activeSubstepId)
@@ -153,10 +159,10 @@ export default function FollowUpsStep({
     onAutoApprove: handleAutoApprove,
   })
 
-  // The existing runner applies to comms / integrations substeps only.
-  // Department panels manage their own runner internally.
-  const runnerItems = (isDepartment || isPreview) ? [] : activeSubstep?.items ?? []
-  const { statuses, rerun, allDone, failureCount, warningCount } = useFollowUpsRunner({
+  // Comms and integrations are both display-only — no async runner needed.
+  // Departments manage their own runner internally.
+  const runnerItems = (isDepartment || isPreview || isIntegrations || isComms) ? [] : activeSubstep?.items ?? []
+  const { statuses, rerun, allDone, failureCount, warningCount, runningCount } = useFollowUpsRunner({
     items: runnerItems,
     substepId: activeSubstepId,
     ctx,
@@ -175,6 +181,10 @@ export default function FollowUpsStep({
       })
     }
     if (!isDepartment) {
+      // Integrations and comms are display-only — always allow continue.
+      if (isIntegrations || isComms) {
+        return { canContinue: true, disabledReason: null }
+      }
       return {
         canContinue: allDone,
         disabledReason:
@@ -197,9 +207,12 @@ export default function FollowUpsStep({
     previewRunner.statuses,
     previewRunner.aggregate,
     previewRunner.allDone,
+    isIntegrations,
     isDepartment,
     allDone,
     failureCount,
+    runningCount,
+    statuses.size,
     runnerItems.length,
     approvalByDepartment,
     tasksByDepartment,
@@ -397,28 +410,26 @@ export default function FollowUpsStep({
 
               {isComms && (
                 <CommunicationsPanel
-                  items={activeSubstep.items}
-                  statuses={statuses}
-                  onRerun={rerun}
+                  items={commItems}
+                  onChange={setCommItems}
+                  selectedEmployeeCount={employees.length}
                 />
               )}
 
               {isIntegrations && (
                 <IntegrationsPanel
                   substep={activeSubstep}
-                  statuses={statuses}
-                  onRerun={rerun}
                 />
               )}
             </div>
 
-            {/* Status summaries — only for comms/integrations, Preview manages its own */}
-            {!isDepartment && !isPreview && failureCount > 0 && !isIntegrations && (
+            {/* Status summaries — Preview manages its own; comms/integrations are display-only */}
+            {!isDepartment && !isPreview && !isIntegrations && !isComms && failureCount > 0 && (
               <p className="text-center text-[12.5px] text-red-600 mt-4">
                 {failureCount} item{failureCount > 1 ? 's' : ''} failed — click Re-run on each failed item to retry.
               </p>
             )}
-            {!isDepartment && !isPreview && failureCount === 0 && warningCount > 0 && (
+            {!isDepartment && !isPreview && !isIntegrations && !isComms && failureCount === 0 && warningCount > 0 && (
               <p className="text-center text-[12.5px] text-amber-600 mt-4">
                 {warningCount} warning{warningCount > 1 ? 's' : ''} noted — you can continue when ready.
               </p>

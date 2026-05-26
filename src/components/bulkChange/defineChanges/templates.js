@@ -60,6 +60,13 @@ export const TEMPLATES = [
     ['workLocation', 'employmentType', 'accountStatus', 'startDate', 'payGroup'],
   ),
   playbook(
+    'title-change',
+    'Title change',
+    Briefcase,
+    'Update job titles only — no comp, level, or access changes.',
+    ['title'],
+  ),
+  playbook(
     'promotion',
     'Promotion cycle',
     TrendingUp,
