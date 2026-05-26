@@ -10,6 +10,7 @@ import DepartmentPanel from './departments/DepartmentPanel'
 import {
   useDepartmentTasks,
   getDepartmentGateState,
+  getDepartmentApprovalGate,
 } from './departments/useDepartmentTasks'
 import { DEPARTMENTS_BY_ID } from './departments/DEPARTMENTS'
 import PropertiesSidebar from '../defineChanges/PropertiesSidebar'
@@ -42,6 +43,7 @@ export default function FollowUpsStep({
   effectiveDateTime,
   onEffectiveDateTimeChange,
   lead,
+  worklistName,
   onComplete,
   onBack,
   onAddObserver,
@@ -56,6 +58,11 @@ export default function FollowUpsStep({
   setTasksByDepartment,
   ownerByDepartment,
   setOwnerByDepartment,
+  // Department approval + SLA state (lifted to BulkChangePage)
+  approvalByDepartment,
+  setApprovalByDepartment,
+  slaByDepartment,
+  setSlaByDepartment,
   // Preview event approver state (lifted to BulkChangePage)
   approverByEventId,
   setApproverByEventId,
@@ -130,11 +137,19 @@ export default function FollowUpsStep({
     [onAddApprover],
   )
 
-  // Preview runner — single instance, owns all state for gate logic + chip assignment
+  // Preview substep items — stable reference so the runner can always compute
+  // triggeredByTier even when we've navigated away to a department substep.
+  const previewSubstep = useMemo(() => plan.find((s) => s.kind === 'preview'), [plan])
+  const previewEventSources = previewSubstep?.items ?? []
+
+  // Preview runner — single instance, owns all state for gate logic + chip assignment.
+  // Always receives the full event sources so triggeredByTier is available on dept substeps.
+  // substepId is frozen to the preview substep id when not on preview, so the runner
+  // doesn't re-run evaluations every time the user navigates between substeps.
   const previewRunner = usePreviewRunner({
-    eventSources: isPreview ? (activeSubstep?.items ?? []) : [],
+    eventSources: previewEventSources,
     ctx,
-    substepId: activeSubstepId,
+    substepId: isPreview ? activeSubstepId : (previewSubstep?.id ?? 'systemChecks'),
     onAutoApprove: handleAutoApprove,
   })
 
@@ -170,20 +185,13 @@ export default function FollowUpsStep({
               : 'Some items are still running',
       }
     }
-    // Department panel gate — owner + due dates per task
-    const dept = ownerByDepartment[activeSubstep.departmentId] ?? null
+    // Department panel gate — approval action + task acknowledgment
     const tasks = tasksByDepartment[activeSubstep.departmentId] ?? []
-    const missingDueDates = tasks.filter((t) => !t.dueDate).length
-    if (!dept) {
-      return { canContinue: false, disabledReason: 'Assign an owner to continue' }
-    }
-    if (missingDueDates > 0) {
-      return {
-        canContinue: false,
-        disabledReason: `${missingDueDates} task${missingDueDates === 1 ? '' : 's'} missing a due date`,
-      }
-    }
-    return { canContinue: true, disabledReason: null }
+    return getDepartmentApprovalGate({
+      deptId: activeSubstep.departmentId,
+      tasks,
+      approvalByDepartment,
+    })
   }, [
     isPreview,
     previewRunner.statuses,
@@ -193,7 +201,7 @@ export default function FollowUpsStep({
     allDone,
     failureCount,
     runnerItems.length,
-    ownerByDepartment,
+    approvalByDepartment,
     tasksByDepartment,
     activeSubstep,
   ])
@@ -269,9 +277,35 @@ export default function FollowUpsStep({
       getDepartmentGateState({
         activeDeptIds,
         tasksByDepartment,
-        ownerByDepartment,
+        approvalByDepartment,
       }),
-    [activeDeptIds, tasksByDepartment, ownerByDepartment],
+    [activeDeptIds, tasksByDepartment, approvalByDepartment],
+  )
+
+  // Build domain-scoped event lists for the active department panel.
+  // triggeredEvents = all events for this dept (including loading state) from the catalog.
+  // filteredTriggered = only the triggered ones, for the AI narrative + hero stats.
+  const activeDeptId = isDepartment ? activeSubstep?.departmentId : null
+  const allDomainEvents = useMemo(() => {
+    if (!activeDeptId) return []
+    return previewEventSources
+      .filter(
+        (src) =>
+          src.ownsResolution?.kind === 'department' &&
+          src.ownsResolution?.id === activeDeptId,
+      )
+      .map((src) => ({ source: src, entry: previewRunner.statuses.get(src.id) }))
+  }, [activeDeptId, previewEventSources, previewRunner.statuses])
+
+  const triggeredDomainEvents = useMemo(
+    () => allDomainEvents.filter((e) => e.entry?.triggered),
+    [allDomainEvents],
+  )
+
+  // jobMeta — passed to DepartmentHeroHeader
+  const jobMeta = useMemo(
+    () => ({ name: worklistName ?? 'Bulk Change', lead, effectiveDate: effectiveDateTime?.date ?? null }),
+    [worklistName, lead, effectiveDateTime],
   )
 
   return (
@@ -341,6 +375,23 @@ export default function FollowUpsStep({
                   onResetTaskDescription={(taskId) =>
                     resetSystemDescription(activeSubstep.departmentId, taskId)
                   }
+                  triggeredEvents={triggeredDomainEvents}
+                  allDomainEvents={allDomainEvents}
+                  domainApproval={approvalByDepartment?.[activeSubstep.departmentId] ?? null}
+                  onSetDomainApproval={(approval) =>
+                    setApprovalByDepartment((prev) => ({
+                      ...prev,
+                      [activeSubstep.departmentId]: approval,
+                    }))
+                  }
+                  sla={slaByDepartment?.[activeSubstep.departmentId] ?? null}
+                  onSetSla={(date) =>
+                    setSlaByDepartment?.((prev) => ({
+                      ...(prev ?? {}),
+                      [activeSubstep.departmentId]: date,
+                    }))
+                  }
+                  jobMeta={jobMeta}
                 />
               )}
 
@@ -379,9 +430,12 @@ export default function FollowUpsStep({
             )}
             {isDepartment && gate.canContinue && overallGate.canContinue === false && (
               <p className="text-center text-[12px] text-rippling-muted mt-4">
-                Across all departments: {overallGate.missingOwnerCount} owner
-                {overallGate.missingOwnerCount === 1 ? '' : 's'} and {overallGate.missingDueDateCount} due date
-                {overallGate.missingDueDateCount === 1 ? '' : 's'} still to set.
+                {overallGate.missingApprovalCount > 0 && (
+                  <>Across all departments: {overallGate.missingApprovalCount} approval{overallGate.missingApprovalCount === 1 ? '' : 's'} pending. </>
+                )}
+                {overallGate.unacknowledgedTaskCount > 0 && (
+                  <>{overallGate.unacknowledgedTaskCount} task{overallGate.unacknowledgedTaskCount === 1 ? '' : 's'} still need acknowledgment.</>
+                )}
               </p>
             )}
           </div>

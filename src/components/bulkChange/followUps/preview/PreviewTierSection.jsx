@@ -43,6 +43,7 @@ export default function PreviewTierSection({
   onAssignApprover,
   onRemoveApprover,
   onOpenDetails,
+  hideApproverChip = false,
 }) {
   const meta = TIER_META[tier]
   const [expanded, setExpanded] = useState(meta?.expandedByDefault ?? false)
@@ -118,6 +119,7 @@ export default function PreviewTierSection({
               onAssignApprover={onAssignApprover}
               onRemoveApprover={onRemoveApprover}
               onOpenDetails={onOpenDetails}
+              hideApproverChip={hideApproverChip}
             />
           ))}
         </div>
