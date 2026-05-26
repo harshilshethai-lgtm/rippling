@@ -9,6 +9,10 @@ import { useDerivedContext } from './defineChanges/useDerivedContext'
 import { applyFilters } from './bulkChangeUtils'
 import CsvSplitButton from './csv/wizard/CsvSplitButton'
 
+// Stable lookup maps built once at module load
+const ALL_EMPLOYEES_BY_ID = new Map(EMPLOYEES.map((e) => [e.id, e]))
+const EMPLOYEE_BY_NAME = new Map(EMPLOYEES.map((e) => [e.fullName, e]))
+
 /**
  * Step 3 of the Bulk Change wizard — "Make changes".
  *
@@ -152,10 +156,6 @@ export default function MakeChangesStep({
   )
 
   // ── Header / footer metrics ────────────────────────────────────────────
-  // "Changes" counts cells that resolve to a value different from the
-  // employee's current value. "Set" counts the same denominator (rows ×
-  // fields) but treats _any_ non-empty resolved cell as set (matches the
-  // reference design's "48 of 100 cells set" indicator).
   const { changesCount, setCount, totalCells } = useMemo(
     () =>
       computeCellMetrics({
@@ -168,6 +168,32 @@ export default function MakeChangesStep({
     [employees, selectedFieldKeys, bulkValues, cellOverrides, uniformByField],
   )
 
+  // ── Per-row validation statuses ───────────────────────────────────────
+  const rowStatuses = useMemo(
+    () =>
+      computeRowStatuses({
+        employees,
+        selectedFieldKeys,
+        bulkValues,
+        cellOverrides,
+        uniformByField,
+      }),
+    [employees, selectedFieldKeys, bulkValues, cellOverrides, uniformByField],
+  )
+
+  const errorCount = useMemo(
+    () => [...rowStatuses.values()].filter((v) => v.status === 'error').length,
+    [rowStatuses],
+  )
+  const warningCount = useMemo(
+    () => [...rowStatuses.values()].filter((v) => v.status === 'warning').length,
+    [rowStatuses],
+  )
+  const cleanCount = useMemo(
+    () => [...rowStatuses.values()].filter((v) => v.status === 'clean').length,
+    [rowStatuses],
+  )
+
   const setPct = totalCells > 0 ? Math.round((setCount / totalCells) * 100) : 0
   const hiddenBySearchCount = employees.length - filteredEmployees.length
 
@@ -176,8 +202,9 @@ export default function MakeChangesStep({
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
         {/* ── Top toolbar ──────────────────────────────────────────────── */}
         <div className="px-6 pt-4 pb-3 border-b border-rippling-line bg-white">
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="relative w-[300px] max-w-full">
+          <div ref={askAiAnchorRef} className="flex items-center gap-2 flex-wrap">
+            {/* Search */}
+            <div className="relative w-[240px] max-w-full shrink-0">
               <Search
                 size={14}
                 strokeWidth={1.9}
@@ -194,56 +221,56 @@ export default function MakeChangesStep({
               />
             </div>
 
-            <div className="ml-auto flex items-center gap-2 text-[12.5px] text-rippling-ink-2 tabular-nums">
-              <span>
-                <span className="font-medium">{changesCount}</span>{' '}
-                <span className="text-rippling-muted">
-                  {changesCount === 1 ? 'change' : 'changes'}
-                </span>
+            {/* Status pills */}
+            <StatusPill kind="error" count={errorCount} label="blockers" />
+            <StatusPill kind="warning" count={warningCount} label="warnings" />
+            <StatusPill kind="clean" count={cleanCount} label="clean" />
+
+            {/* Row / field counts */}
+            <span className="text-rippling-line mx-0.5">·</span>
+            <span className="text-[12.5px] text-rippling-ink-2 tabular-nums">
+              <span className="font-medium">{employees.length}</span>{' '}
+              <span className="text-rippling-muted">
+                {employees.length === 1 ? 'row' : 'rows'}
               </span>
-              <span className="text-rippling-line">·</span>
-              <span>
-                <span className="font-medium">{employees.length}</span>{' '}
-                <span className="text-rippling-muted">
-                  {employees.length === 1 ? 'employee' : 'employees'}
-                </span>
+            </span>
+            <span className="text-rippling-line">·</span>
+            <span className="text-[12.5px] text-rippling-ink-2 tabular-nums">
+              <span className="font-medium">{selectedFieldKeys.length}</span>{' '}
+              <span className="text-rippling-muted">
+                {selectedFieldKeys.length === 1 ? 'field' : 'fields'}
               </span>
-              <span className="text-rippling-line">·</span>
-              <span>
-                <span className="font-medium">{selectedFieldKeys.length}</span>{' '}
-                <span className="text-rippling-muted">
-                  {selectedFieldKeys.length === 1 ? 'field' : 'fields'}
+            </span>
+            {hiddenBySearchCount > 0 && (
+              <>
+                <span className="text-rippling-line">·</span>
+                <span className="text-[12.5px] text-rippling-muted">
+                  {hiddenBySearchCount} hidden by search
                 </span>
-              </span>
-              {hiddenBySearchCount > 0 && (
-                <>
-                  <span className="text-rippling-line">·</span>
-                  <span className="text-rippling-muted">
-                    {hiddenBySearchCount} hidden by search
-                  </span>
-                </>
-              )}
+              </>
+            )}
+
+            {/* CSV + Ask AI — same row */}
+            <div className="ml-auto flex items-center gap-2 shrink-0">
+              <CsvSplitButton
+                mode="make"
+                variant="toolbar"
+                employees={employees}
+                selectedFieldKeys={selectedFieldKeys}
+                bulkValues={bulkValues}
+                cellOverrides={cellOverrides}
+                uniformByField={uniformByField}
+                stagedCsvDraft={stagedCsvDraft}
+                onClearStagedCsvDraft={onClearStagedCsvDraft}
+                onConfirm={({ nextStatePatch }) => onApplyCsvStatePatch?.(nextStatePatch)}
+              />
+              <MakeChangesAskAi
+                parserContext={aiContext}
+                selectedEmployees={employees}
+                onApply={handleApplyAiChanges}
+                anchorMode="left"
+              />
             </div>
-          </div>
-          <div ref={askAiAnchorRef} className="mt-3 flex items-center gap-2 flex-wrap">
-            <CsvSplitButton
-              mode="make"
-              variant="toolbar"
-              employees={employees}
-              selectedFieldKeys={selectedFieldKeys}
-              bulkValues={bulkValues}
-              cellOverrides={cellOverrides}
-              uniformByField={uniformByField}
-              stagedCsvDraft={stagedCsvDraft}
-              onClearStagedCsvDraft={onClearStagedCsvDraft}
-              onConfirm={({ nextStatePatch }) => onApplyCsvStatePatch?.(nextStatePatch)}
-            />
-            <MakeChangesAskAi
-              parserContext={aiContext}
-              selectedEmployees={employees}
-              onApply={handleApplyAiChanges}
-              anchorMode="left"
-            />
           </div>
         </div>
 
@@ -255,6 +282,7 @@ export default function MakeChangesStep({
             bulkValues={bulkValues}
             cellOverrides={cellOverrides}
             uniformByField={uniformByField}
+            rowStatuses={rowStatuses}
             onChangeCell={onChangeCell}
             onChangeBulkValue={onChangeBulkValue}
             onToggleUniform={onToggleUniform}
@@ -326,6 +354,43 @@ function ShortcutHint({ keys, label }) {
   )
 }
 
+/* ── Status pill ─────────────────────────────────────────────────────────── */
+
+const PILL_STYLES = {
+  error: {
+    dot: 'bg-red-500',
+    pill: 'bg-red-50 text-red-700 border-red-200',
+    pillMuted: 'bg-rippling-surface text-rippling-muted border-rippling-line-2',
+  },
+  warning: {
+    dot: 'bg-amber-400',
+    pill: 'bg-amber-50 text-amber-700 border-amber-200',
+    pillMuted: 'bg-rippling-surface text-rippling-muted border-rippling-line-2',
+  },
+  clean: {
+    dot: 'bg-emerald-500',
+    pill: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    pillMuted: 'bg-rippling-surface text-rippling-muted border-rippling-line-2',
+  },
+}
+
+function StatusPill({ kind, count, label }) {
+  const styles = PILL_STYLES[kind]
+  const active = count > 0
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full border text-[12px] font-medium transition-colors ${
+        active ? styles.pill : styles.pillMuted
+      }`}
+    >
+      <span
+        className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? styles.dot : 'bg-rippling-muted/40'}`}
+      />
+      {count} {label}
+    </span>
+  )
+}
+
 /* ── Cell metrics helper ─────────────────────────────────────────────────── */
 
 function computeCellMetrics({
@@ -364,4 +429,147 @@ function computeCellMetrics({
   }
 
   return { totalCells, changesCount, setCount }
+}
+
+/* ── Row status helpers ───────────────────────────────────────────────────── */
+
+function parseCompValue(str) {
+  if (!str) return 0
+  const num = parseFloat(String(str).replace(/[$,\s]/g, ''))
+  return isNaN(num) ? 0 : num
+}
+
+/**
+ * Deterministic simulation of "this field is already scheduled for edit in
+ * another worklist". Flags ~20% of (employee, field) combinations.
+ */
+function isScheduledElsewhere(empId, fieldKey) {
+  const raw = empId + '|' + fieldKey
+  let hash = 0
+  for (let i = 0; i < raw.length; i++) hash = (hash * 31 + raw.charCodeAt(i)) | 0
+  return Math.abs(hash) % 5 === 0
+}
+
+/**
+ * Walk the manager chain starting from `startEmpId`. At each step, prefer
+ * the proposed (new) manager over the existing one. Returns true if we loop
+ * back to `startEmpId`.
+ */
+function detectCycle(startEmpId, proposedManagerMap) {
+  const visited = new Set()
+  let current = startEmpId
+
+  while (current) {
+    if (visited.has(current)) return true
+    visited.add(current)
+
+    const proposed = proposedManagerMap.get(current)
+    if (proposed !== undefined) {
+      current = proposed
+    } else {
+      current = ALL_EMPLOYEES_BY_ID.get(current)?.managerId ?? null
+    }
+  }
+  return false
+}
+
+/**
+ * Compute a per-employee validation status + human-readable reasons for every
+ * employee in the current worklist slice.
+ *
+ * Rules (precedence: error > warning > clean > empty):
+ *   error   — cyclic manager chain OR base comp increase > 20 %
+ *   warning — field scheduled in another worklist OR base comp increase > 10 %
+ *   clean   — at least one genuine change, no errors/warnings
+ *   empty   — no cells set for this employee
+ *
+ * Returns a Map<empId, { status: string, reasons: string[] }>.
+ */
+function computeRowStatuses({
+  employees,
+  selectedFieldKeys,
+  bulkValues,
+  cellOverrides,
+  uniformByField,
+}) {
+  // Build proposed-manager map for cycle detection
+  const proposedManagerMap = new Map() // empId → newManagerId | null
+  const managerFieldKey = 'manager'
+  if (selectedFieldKeys.includes(managerFieldKey)) {
+    const mode = uniformByField?.[managerFieldKey] ?? 'uniform'
+    const bulk = bulkValues?.[managerFieldKey]
+    const hasBulk = bulk !== undefined && bulk !== ''
+    for (const emp of employees) {
+      const override = cellOverrides?.[emp.id]?.[managerFieldKey]
+      const hasOverride = override !== undefined && override !== ''
+      const resolved = mode === 'unique'
+        ? hasOverride ? override : hasBulk ? bulk : ''
+        : hasBulk ? bulk : ''
+      if (resolved !== '') {
+        const newManager = EMPLOYEE_BY_NAME.get(resolved)
+        proposedManagerMap.set(emp.id, newManager?.id ?? null)
+      }
+    }
+  }
+
+  const statuses = new Map()
+
+  for (const emp of employees) {
+    const errors = []
+    const warnings = []
+    let hasChange = false
+
+    for (const fieldKey of selectedFieldKeys) {
+      const mode = uniformByField?.[fieldKey] ?? 'uniform'
+      const bulk = bulkValues?.[fieldKey]
+      const hasBulk = bulk !== undefined && bulk !== ''
+      const override = cellOverrides?.[emp.id]?.[fieldKey]
+      const hasOverride = override !== undefined && override !== ''
+      const resolved = mode === 'unique'
+        ? hasOverride ? override : hasBulk ? bulk : ''
+        : hasBulk ? bulk : ''
+
+      if (resolved === '') continue
+
+      const current = getCurrentValue(emp, fieldKey)
+      if (resolved === current) continue
+
+      hasChange = true
+
+      // Comp % increase check
+      if (fieldKey === 'baseCompensation') {
+        const currentNum = parseCompValue(current)
+        const newNum = parseCompValue(resolved)
+        if (currentNum > 0 && newNum > 0) {
+          const pct = (newNum - currentNum) / currentNum
+          const pctStr = `+${Math.round(pct * 100)}%`
+          if (pct > 0.2) errors.push(`Comp increase of ${pctStr} exceeds 20% limit`)
+          else if (pct > 0.1) warnings.push(`Comp increase of ${pctStr} exceeds 10% threshold`)
+        }
+      }
+
+      // Worklist conflict check
+      if (isScheduledElsewhere(emp.id, fieldKey)) {
+        const label = fieldKey.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase())
+        warnings.push(`"${label}" scheduled in another worklist`)
+      }
+    }
+
+    // Cyclic manager check (independent of field loop)
+    if (proposedManagerMap.has(emp.id) && detectCycle(emp.id, proposedManagerMap)) {
+      errors.push('Cyclic manager dependency — this employee would report to themselves')
+    }
+
+    const status = errors.length > 0
+      ? 'error'
+      : warnings.length > 0
+        ? 'warning'
+        : hasChange
+          ? 'clean'
+          : 'empty'
+
+    statuses.set(emp.id, { status, reasons: [...errors, ...warnings] })
+  }
+
+  return statuses
 }

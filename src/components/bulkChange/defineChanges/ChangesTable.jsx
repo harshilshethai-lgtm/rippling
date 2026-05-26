@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { ArrowRight, ChevronDown, Search, User } from 'lucide-react'
+import { AlertTriangle, ArrowRight, CheckCircle, ChevronDown, Info, Search, User } from 'lucide-react'
 import { avatarClass, classNames, initials } from '../../../lib/utils'
 import { FIELDS_BY_KEY } from './fieldSchema'
 import { getCurrentValue } from './currentValues'
@@ -35,6 +35,7 @@ export default function ChangesTable({
   bulkValues,
   cellOverrides,
   uniformByField,
+  rowStatuses,
   onChangeCell,
   onChangeBulkValue,
   onToggleUniform,
@@ -153,6 +154,14 @@ export default function ChangesTable({
                   )
                 })
               )}
+
+              {/* Sticky status column header */}
+              <th
+                className={classNames(
+                  'sticky right-0 z-30 bg-rippling-surface-2 border-b-2 border-l border-rippling-line',
+                  'w-10 min-w-[40px] px-0',
+                )}
+              />
             </tr>
           </thead>
 
@@ -160,7 +169,7 @@ export default function ChangesTable({
             {employees.length === 0 && (
               <tr>
                 <td
-                  colSpan={Math.max(2, visibleFields.length + 1)}
+                  colSpan={Math.max(2, visibleFields.length + 2)}
                   className="px-3 py-16 text-center text-rippling-muted text-[13px]"
                 >
                   No employees in worklist.
@@ -246,10 +255,97 @@ export default function ChangesTable({
                     </td>
                   )
                 })}
+
+                {/* Sticky status column cell */}
+                <td
+                  className={classNames(
+                    'sticky right-0 z-10 bg-white group-hover:bg-rippling-surface/50 transition-colors',
+                    'w-10 min-w-[40px] border-l border-rippling-line-2',
+                    'align-middle text-center',
+                  )}
+                >
+                  {(() => {
+                    const entry = rowStatuses?.get(employee.id)
+                    const status = entry?.status ?? 'empty'
+                    const reasons = entry?.reasons ?? []
+                    return <RowStatusIcon status={status} reasons={reasons} />
+                  })()}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  )
+}
+
+/* ── Row status icon with hover tooltip ──────────────────────────────────── */
+
+const STATUS_ICON_META = {
+  error:   { Icon: AlertTriangle, cls: 'text-red-500',        tip: 'Blocker' },
+  warning: { Icon: AlertTriangle, cls: 'text-amber-400',      tip: 'Warning' },
+  clean:   { Icon: CheckCircle,   cls: 'text-emerald-500',    tip: 'No issues' },
+  empty:   { Icon: Info,          cls: 'text-rippling-muted/40', tip: 'No changes set' },
+}
+
+function RowStatusIcon({ status, reasons }) {
+  const meta = STATUS_ICON_META[status] ?? STATUS_ICON_META.empty
+  const { Icon, cls } = meta
+  const hasTooltip = (status === 'error' || status === 'warning') && reasons && reasons.length > 0
+
+  const iconEl = (
+    <Icon
+      size={15}
+      strokeWidth={status === 'empty' ? 1.75 : 2}
+      className={classNames(cls, 'mx-auto block')}
+    />
+  )
+
+  if (!hasTooltip) {
+    return (
+      <span className="flex items-center justify-center w-full h-full py-2">
+        {iconEl}
+      </span>
+    )
+  }
+
+  return (
+    <div className="group/tip relative flex items-center justify-center w-full py-2">
+      {iconEl}
+      {/* Tooltip — appears to the left of the sticky column */}
+      <div
+        className={classNames(
+          'pointer-events-none absolute right-[calc(100%+8px)] top-1/2 -translate-y-1/2 z-50',
+          'hidden group-hover/tip:block',
+          'w-max max-w-[260px] rounded-md px-3 py-2 shadow-lg',
+          status === 'error'
+            ? 'bg-red-600 text-white'
+            : 'bg-amber-500 text-white',
+        )}
+      >
+        <p className="text-[11px] font-semibold uppercase tracking-wide mb-1 opacity-80">
+          {meta.tip}
+        </p>
+        <ul className="space-y-0.5">
+          {reasons.map((r, i) => (
+            <li key={i} className="text-[12px] leading-snug">
+              {r}
+            </li>
+          ))}
+        </ul>
+        {/* Arrow pointing right */}
+        <div
+          className={classNames(
+            'absolute left-full top-1/2 -translate-y-1/2',
+            'w-0 h-0',
+            'border-t-[5px] border-t-transparent',
+            'border-b-[5px] border-b-transparent',
+            status === 'error'
+              ? 'border-l-[5px] border-l-red-600'
+              : 'border-l-[5px] border-l-amber-500',
+          )}
+        />
       </div>
     </div>
   )
