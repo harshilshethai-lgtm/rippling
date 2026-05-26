@@ -5,6 +5,7 @@ import UserSelectionStep from './bulkChange/UserSelectionStep'
 import DefineChangeSetStep from './bulkChange/DefineChangeSetStep'
 import MakeChangesStep from './bulkChange/MakeChangesStep'
 import FollowUpsStep from './bulkChange/followUps/FollowUpsStep'
+import ReviewApplyStep from './bulkChange/review/ReviewApplyStep'
 import StepIndicator, { BULK_CHANGE_STEPS } from './bulkChange/StepIndicator'
 import { getDepartmentsOwnedByPerson } from './bulkChange/followUps/departments/useDepartmentTasks'
 import { DEPARTMENTS_BY_ID } from './bulkChange/followUps/departments/DEPARTMENTS'
@@ -600,6 +601,16 @@ export default function BulkChangePage({
           )}
 
           {stepId === 'followups' && null}
+
+          {stepId === 'review' && (
+            <button
+              type="button"
+              className="h-8 pl-3 pr-2.5 rounded-md text-[13px] font-medium flex items-center gap-1.5 bg-rippling-plum text-white hover:bg-rippling-plum-hover shadow-sm transition-colors"
+            >
+              <span>Apply changes</span>
+              <ArrowRight size={13} strokeWidth={2} />
+            </button>
+          )}
         </div>
       </header>
 
@@ -666,6 +677,18 @@ export default function BulkChangePage({
           setSlaByDepartment={setSlaByDepartment}
           approverByEventId={approverByEventId}
           setApproverByEventId={setApproverByEventId}
+        />
+      )}
+
+      {stepId === 'review' && (
+        <ReviewApplyStep
+          selectedFieldKeys={selectedFieldKeys}
+          selectedEmployeeIds={finalizedEmployeeIds}
+          bulkValues={bulkValues}
+          effectiveDateTime={effectiveDateTime}
+          worklistName={worklistName}
+          manualPeople={manualPeople}
+          onNavigateToFollowups={() => setStepId('followups')}
         />
       )}
 

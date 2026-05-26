@@ -156,7 +156,7 @@ export default function FollowUpsStep({
   // The existing runner applies to comms / integrations substeps only.
   // Department panels manage their own runner internally.
   const runnerItems = (isDepartment || isPreview) ? [] : activeSubstep?.items ?? []
-  const { statuses, rerun, allDone, failureCount, warningCount } = useFollowUpsRunner({
+  const { statuses, rerun, allDone, failureCount, warningCount, runningCount } = useFollowUpsRunner({
     items: runnerItems,
     substepId: activeSubstepId,
     ctx,
@@ -175,6 +175,15 @@ export default function FollowUpsStep({
       })
     }
     if (!isDepartment) {
+      // Integrations are informational — failures don't block Review & apply.
+      if (isIntegrations) {
+        const integrationsFinished =
+          runnerItems.length === 0 || (statuses.size > 0 && runningCount === 0)
+        return {
+          canContinue: integrationsFinished,
+          disabledReason: integrationsFinished ? null : 'Some integrations are still running',
+        }
+      }
       return {
         canContinue: allDone,
         disabledReason:
@@ -197,9 +206,12 @@ export default function FollowUpsStep({
     previewRunner.statuses,
     previewRunner.aggregate,
     previewRunner.allDone,
+    isIntegrations,
     isDepartment,
     allDone,
     failureCount,
+    runningCount,
+    statuses.size,
     runnerItems.length,
     approvalByDepartment,
     tasksByDepartment,
@@ -416,6 +428,11 @@ export default function FollowUpsStep({
             {!isDepartment && !isPreview && failureCount > 0 && !isIntegrations && (
               <p className="text-center text-[12.5px] text-red-600 mt-4">
                 {failureCount} item{failureCount > 1 ? 's' : ''} failed — click Re-run on each failed item to retry.
+              </p>
+            )}
+            {isIntegrations && failureCount > 0 && runningCount === 0 && (
+              <p className="text-center text-[12.5px] text-amber-600 mt-4">
+                {failureCount} integration{failureCount > 1 ? 's' : ''} failed — you can continue to Review & apply. Retry failed items before submitting if needed.
               </p>
             )}
             {!isDepartment && !isPreview && failureCount === 0 && warningCount > 0 && (

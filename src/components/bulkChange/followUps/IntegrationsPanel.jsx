@@ -47,7 +47,7 @@ export default function IntegrationsPanel({ substep, statuses, onRerun }) {
             <AlertCircle size={15} strokeWidth={1.75} className="text-red-500 shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <p className="text-[12.5px] font-semibold text-red-800">
-                {failedItems.length} integration{failedItems.length > 1 ? 's' : ''} failed
+                {failedItems.length} integration{failedItems.length > 1 ? 's' : ''} failed — you can still continue
               </p>
               <ul className="mt-1.5 space-y-1.5">
                 {failedItems.map((item) => {
