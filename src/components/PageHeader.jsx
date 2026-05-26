@@ -118,6 +118,13 @@ export default function PageHeader({
               {tab.label}
             </TabButton>
           ))}
+          <div className="w-px h-4 bg-rippling-line mx-1" />
+          <TabButton
+            active={peopleTab === 'slides'}
+            onClick={() => onPeopleTabChange('slides')}
+          >
+            Slides
+          </TabButton>
         </div>
       </div>
     </div>
