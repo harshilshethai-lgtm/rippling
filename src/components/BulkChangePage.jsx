@@ -685,6 +685,9 @@ export default function BulkChangePage({
           selectedFieldKeys={selectedFieldKeys}
           selectedEmployeeIds={finalizedEmployeeIds}
           bulkValues={bulkValues}
+          cellOverrides={cellOverrides}
+          uniformByField={uniformByField}
+          tasksByDepartment={tasksByDepartment}
           effectiveDateTime={effectiveDateTime}
           worklistName={worklistName}
           manualPeople={manualPeople}
